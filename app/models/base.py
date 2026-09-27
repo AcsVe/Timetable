@@ -80,6 +80,8 @@ class SyncMixin:
 
 
 def jsonable(v):
+    if isinstance(v, (bytes, bytearray, memoryview)):
+        return f"<{len(v)} bytes>"  # binary (e.g. logo) is never echoed back in JSON or audit diffs
     if isinstance(v, uuid.UUID):
         return str(v)
     if isinstance(v, (datetime, date, time)):

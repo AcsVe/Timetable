@@ -4,7 +4,7 @@ from flask_login import login_required
 web_bp = Blueprint("web", __name__)
 
 # Bump when static assets change so the service worker refreshes its cache.
-ASSET_VERSION = "2026.09.27-3"
+ASSET_VERSION = "2026.09.27-4"
 
 
 @web_bp.get("/")
@@ -27,6 +27,24 @@ def service_worker():
 def manifest():
     return send_from_directory(current_app.static_folder, "manifest.webmanifest",
                                mimetype="application/manifest+json", max_age=3600)
+
+
+@web_bp.get("/school-logo")
+def school_logo():
+    """Uploaded school logo (public: it also appears on the login page and printed reports)."""
+    from flask import Response, abort
+    from sqlalchemy import select
+    from sqlalchemy.orm import undefer
+
+    from app.extensions import db
+    from app.models import School
+
+    school = db.session.scalars(select(School).options(undefer(School.logo_data))).first()
+    if school is None or not school.logo_data:
+        abort(404)
+    resp = Response(bytes(school.logo_data), mimetype=school.logo_mime or "image/png")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
 
 
 @web_bp.get("/offline")

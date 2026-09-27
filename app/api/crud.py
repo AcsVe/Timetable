@@ -207,7 +207,7 @@ def _must_get(model, id_, field_name):
 
 
 RESOURCES: dict[str, Resource] = {
-    "school": Resource(School),
+    "school": Resource(School, hidden_fields=frozenset({"logo_data"}), read_only_fields=frozenset({"logo_mime"})),
     "academic-years": Resource(AcademicYear),
     "terms": Resource(Term),
     "weekdays": Resource(Weekday),

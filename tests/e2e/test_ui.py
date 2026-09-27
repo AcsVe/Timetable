@@ -134,3 +134,31 @@ def test_offline_is_read_only(page):
     tray_chip(page, "العلوم").drag_to(cell(page, 0, 3))
     expect(page.locator("#toast")).to_contain_text("لا يوجد اتصال، لا يمكن الحفظ الآن")
     page.context.set_offline(False)
+
+
+def test_reports_preview_and_exports(page):
+    page.goto(f"{page.base}/#/reports")
+    page.select_option("#report-kind", "stats-teachers")
+    expect(page.locator(".report-table tbody tr").first).to_be_visible()
+    expect(page.locator(".report-title")).to_have_text("إحصائيات المعلمين والنصاب")
+    page.select_option("select[data-filter='teacher_id']", label="سارة يوسف")
+    expect(page.locator(".report-table tbody tr:not(.total)")).to_have_count(1)
+    with page.expect_download() as dl:
+        page.click("#export-xlsx")
+    assert dl.value.suggested_filename.endswith(".xlsx")
+    with page.expect_download() as dl:
+        page.click("#export-pdf")
+    assert dl.value.suggested_filename.endswith(".pdf")
+    page.select_option("#report-kind", "section-timetable")
+    expect(page.locator(".report-grid").first).to_be_visible()
+
+
+def test_logo_upload_from_school_page(page):
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (80, 80), "#1f4e8c").save(buf, "PNG")
+    page.goto(f"{page.base}/#/school")
+    page.set_input_files("#logo-file", files=[{"name": "logo.png", "mimeType": "image/png", "buffer": buf.getvalue()}])
+    expect(page.locator("#toast")).to_contain_text("تم رفع الشعار")
+    expect(page.locator("#school-logo")).to_be_visible()

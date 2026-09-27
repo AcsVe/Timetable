@@ -7,6 +7,7 @@ const ROUTES = {
   grid: () => import('./views/grid.js'),
   lessons: () => import('./views/lessons.js'),
   validate: () => import('./views/validate.js'),
+  reports: () => import('./views/reports.js'),
   timetables: () => import('./views/timetables.js'),
   bells: () => import('./views/bells.js'),
   availability: () => import('./views/availability.js'),

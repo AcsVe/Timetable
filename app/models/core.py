@@ -57,6 +57,9 @@ class School(SyncMixin, db.Model):
     name_ar: Mapped[str] = mapped_column(Text, nullable=False)
     name_en: Mapped[str | None] = mapped_column(Text)
     logo_path: Mapped[str | None] = mapped_column(Text)
+    # Uploaded logo (preferred over an external URL: exports never depend on another site).
+    logo_data = mapped_column(db.LargeBinary, deferred=True)
+    logo_mime: Mapped[str | None] = mapped_column(String(40))
     default_lang: Mapped[str] = mapped_column(enum("ar", "en", name="lang"), nullable=False, default="ar")
 
 

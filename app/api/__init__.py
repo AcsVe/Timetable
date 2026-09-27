@@ -15,4 +15,4 @@ def _nf(e):
     return ApiError("not_found", 404).response()
 
 
-from app.api import scheduling, sync, crud  # noqa: E402,F401  (scheduling routes first: more specific)
+from app.api import scheduling, reports, sync, crud  # noqa: E402,F401  (specific routes before the generic CRUD)
