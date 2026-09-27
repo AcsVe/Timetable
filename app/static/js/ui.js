@@ -1,0 +1,139 @@
+// Small DOM helpers: element builder, toast, modal forms, confirm.
+import { t } from './i18n.js';
+import { errorText } from './api.js';
+
+export function h(tag, attrs = {}, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else if (k === 'dataset') Object.assign(el.dataset, v);
+    else if (v === true) el.setAttribute(k, '');
+    else el.setAttribute(k, v);
+  }
+  for (const c of children.flat(Infinity)) {
+    if (c === null || c === undefined || c === false) continue;
+    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return el;
+}
+
+/** append children, skipping null/false (Element.append would print "null"). */
+export function put(el, ...kids) {
+  el.append(...kids.flat(Infinity).filter(k => k !== null && k !== undefined && k !== false));
+  return el;
+}
+/** replaceChildren with the same null-skipping rule. */
+export function swap(el, ...kids) {
+  el.replaceChildren(...kids.flat(Infinity).filter(k => k !== null && k !== undefined && k !== false));
+  return el;
+}
+
+let toastTimer;
+export function toast(msg, kind = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast show ${kind}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = 'toast'; }, kind === 'err' ? 6000 : 2800);
+}
+export const toastError = e => toast(errorText(e), 'err');
+
+/**
+ * Modal form.
+ * fields: [{name, label, type: text|number|bool|select|multi|color|date|time|datetime|password|textarea,
+ *           options: [{value,label}], required, full, help, placeholder}]
+ * onSubmit(values) may throw ApiError → shown inside the modal, modal stays open.
+ */
+export function openForm({ title, fields, values = {}, submitLabel, onSubmit, extra }) {
+  const dlg = document.getElementById('modal');
+  const form = document.getElementById('modal-form');
+  form.innerHTML = '';
+  const err = h('div', { class: 'form-error', role: 'alert' });
+  const inputs = {};
+  const grid = h('div', { class: 'form-grid' });
+  for (const f of fields) {
+    const id = `f-${f.name}`;
+    const v = values[f.name];
+    let input;
+    if (f.type === 'select') {
+      input = h('select', { id, name: f.name },
+        f.required ? null : h('option', { value: '' }, '—'),
+        (f.options || []).map(o => h('option', { value: o.value, selected: String(o.value) === String(v ?? '') }, o.label)));
+    } else if (f.type === 'multi') {
+      const set = new Set((v || []).map(String));
+      input = h('div', { class: 'multi', id, dataset: { multi: f.name } },
+        (f.options || []).length ? (f.options || []).map(o => h('label', {},
+          h('input', { type: 'checkbox', value: o.value, checked: set.has(String(o.value)) }), o.label))
+          : h('span', { class: 'muted' }, t('لا توجد عناصر')));
+    } else if (f.type === 'bool') {
+      input = h('input', { id, name: f.name, type: 'checkbox', checked: !!v });
+    } else if (f.type === 'textarea') {
+      input = h('textarea', { id, name: f.name, rows: 3 }, v ?? '');
+    } else {
+      const type = { number: 'number', color: 'color', date: 'date', time: 'time', datetime: 'datetime-local',
+                     password: 'password', email: 'email' }[f.type] || 'text';
+      let val = v ?? '';
+      if (f.type === 'datetime' && val) val = String(val).slice(0, 16);
+      if (f.type === 'time' && val) val = String(val).slice(0, 5);
+      if (f.type === 'color' && !val) val = '#dbe7f7';
+      input = h('input', { id, name: f.name, type, value: val, placeholder: f.placeholder, min: f.min, max: f.max,
+                           required: f.required && f.type !== 'password' ? true : null, autocomplete: 'off' });
+    }
+    inputs[f.name] = { f, input };
+    const wrap = h('div', { class: `field${f.full || f.type === 'multi' || f.type === 'textarea' ? ' full' : ''}` },
+      f.type === 'bool' ? h('label', { class: 'inline', for: id }, input, f.label) : [h('label', { for: id }, f.label), input],
+      f.help ? h('div', { class: 'muted', style: { fontSize: '.8rem' } }, f.help) : null);
+    grid.append(wrap);
+  }
+  const submit = h('button', { class: 'btn', type: 'submit', value: 'ok' }, submitLabel || t('حفظ'));
+  form.append(h('h2', {}, title), grid, extra || null, err,
+    h('div', { class: 'modal-actions' },
+      h('button', { class: 'btn ghost', type: 'button', onclick: () => dlg.close() }, t('إلغاء')), submit));
+
+  return new Promise(resolve => {
+    form.onsubmit = async ev => {
+      ev.preventDefault();
+      const out = {};
+      for (const [name, { f, input }] of Object.entries(inputs)) {
+        if (f.type === 'multi') out[name] = [...input.querySelectorAll('input:checked')].map(i => i.value);
+        else if (f.type === 'bool') out[name] = input.checked;
+        else if (f.type === 'number') out[name] = input.value === '' ? null : Number(input.value);
+        else if (f.type === 'datetime') out[name] = input.value ? new Date(input.value).toISOString() : null;
+        else if (f.type === 'password') { if (input.value) out[name] = input.value; }
+        else out[name] = input.value === '' ? null : input.value;
+      }
+      submit.disabled = true;
+      err.textContent = '';
+      try {
+        const r = await onSubmit(out);
+        dlg.close();
+        resolve(r);
+      } catch (e) {
+        err.textContent = errorText(e);
+      } finally {
+        submit.disabled = false;
+      }
+    };
+    dlg.onclose = () => resolve(null);
+    dlg.showModal();
+  });
+}
+
+export function confirmBox(message) {
+  const dlg = document.getElementById('modal');
+  const form = document.getElementById('modal-form');
+  form.innerHTML = '';
+  form.append(h('p', {}, message), h('div', { class: 'modal-actions' },
+    h('button', { class: 'btn ghost', type: 'button', onclick: () => dlg.close('no') }, t('إلغاء')),
+    h('button', { class: 'btn danger', type: 'button', onclick: () => dlg.close('yes') }, t('تأكيد'))));
+  return new Promise(resolve => {
+    dlg.onclose = () => resolve(dlg.returnValue === 'yes');
+    dlg.returnValue = '';
+    dlg.showModal();
+  });
+}
+
+export const nameOf = o => (o ? (document.documentElement.lang === 'en' && o.name_en ? o.name_en : (o.name_ar ?? o.name ?? '')) : '');

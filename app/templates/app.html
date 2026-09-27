@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1f4e8c">
+  <title>جدولة الحصص</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ asset_version }}">
+</head>
+<body>
+  <div id="offline-banner" class="banner" hidden>لا يوجد اتصال — وضع العرض فقط، ولا يمكن الحفظ الآن</div>
+  <header class="topbar">
+    <button class="icon-btn" id="nav-toggle" aria-label="القائمة">☰</button>
+    <img id="school-logo" alt="" hidden>
+    <div class="brand"><span id="school-name">جدولة الحصص</span></div>
+    <div class="tt-picker">
+      <label for="tt-select">الجدول:</label>
+      <select id="tt-select"></select>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn ghost" id="lang-toggle">English</button>
+    <span id="user-name" class="muted"></span>
+    <form method="post" action="/auth/logout"><button class="btn ghost" type="submit">خروج</button></form>
+  </header>
+  <div class="layout">
+    <nav id="sidebar" class="sidebar">
+      <a href="#/grid" data-route="grid">شبكة الجدول</a>
+      <a href="#/lessons" data-route="lessons">الدروس والتوزيع</a>
+      <a href="#/validate" data-route="validate">التحقق</a>
+      <a href="#/timetables" data-route="timetables">الجداول (مسودة/منشور)</a>
+      <div class="nav-title">الإعداد</div>
+      <a href="#/setup/stages" data-route="setup/stages">المراحل</a>
+      <a href="#/setup/grades" data-route="setup/grades">الصفوف</a>
+      <a href="#/setup/sections" data-route="setup/sections">الشعب</a>
+      <a href="#/setup/divisions" data-route="setup/divisions">التقسيمات والمجموعات</a>
+      <a href="#/setup/subjects" data-route="setup/subjects">المباحث</a>
+      <a href="#/setup/teachers" data-route="setup/teachers">المعلمون</a>
+      <a href="#/setup/rooms" data-route="setup/rooms">القاعات</a>
+      <a href="#/bells" data-route="bells">توقيت الحصص</a>
+      <a href="#/availability" data-route="availability">أوقات عدم التوفر</a>
+      <div class="nav-title">النظام</div>
+      <a href="#/setup/academic-years" data-route="setup/academic-years">السنوات الدراسية</a>
+      <a href="#/setup/terms" data-route="setup/terms">الفصول الدراسية</a>
+      <a href="#/setup/weekdays" data-route="setup/weekdays">أيام الأسبوع</a>
+      <a href="#/setup/buildings" data-route="setup/buildings">المباني</a>
+      <a href="#/setup/users" data-route="setup/users" data-admin>المستخدمون</a>
+      <a href="#/school" data-route="school" data-admin>بيانات المدرسة</a>
+    </nav>
+    <main id="view" class="view"><p class="muted">جارٍ التحميل…</p></main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <dialog id="modal"><form method="dialog" id="modal-form"></form></dialog>
+  <script type="module" src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_version }}"></script>
+</body>
+</html>

@@ -43,6 +43,18 @@ def register_cli(app):
         db.session.commit()
         click.echo("base data ready")
 
+    @app.cli.command("seed-demo")
+    @click.option("--admin-email", required=True, help="An existing admin account the demo data is created as.")
+    def seed_demo_cmd(admin_email):
+        """Create a small demo school (stages, sections, teachers, bells, lessons) to try the UI."""
+        from app.demo import seed_demo
+        from app.models import AppUser
+
+        admin = db.session.scalars(select(AppUser).where(AppUser.email == admin_email)).first()
+        if admin is None or admin.role != "admin":
+            raise click.ClickException("admin account not found")
+        click.echo(seed_demo(app, admin.id))
+
     @app.cli.command("purge-idempotency")
     def purge_idempotency():
         """Delete expired idempotency records (run daily)."""
