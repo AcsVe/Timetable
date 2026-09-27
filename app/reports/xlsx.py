@@ -9,7 +9,7 @@ from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from app.reports.data import Grid, Report, Table
+from app.reports.data import Grid, Report, Table, grid_matrix
 
 THIN = Side(style="thin", color="B8C2D0")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -60,34 +60,34 @@ def _header(ws, rep: Report, sub_title: str, width_cols: int, logo: bytes | None
 
 
 def _write_grid(ws, rep: Report, g: Grid, logo):
-    _header(ws, rep, g.title, len(g.days) + 1, logo)
+    corner, heads, rows = grid_matrix(g, rep.layout, rep.rtl)
+    _header(ws, rep, g.title + (f" — {g.subtitle}" if g.subtitle else ""), len(heads) + 1, logo)
     r0 = HEADER_ROWS + 1
-    head = [("الحصة" if rep.rtl else "Period")] + g.days
-    for j, text in enumerate(head, start=1):
+    for j, text in enumerate([corner] + heads, start=1):
         c = ws.cell(row=r0, column=j, value=text)
         c.font, c.fill, c.alignment, c.border = Font(name="Arial", bold=True, color="FFFFFF"), HEAD_FILL, CENTER, BORDER
-    for i, (p, time_label) in enumerate(g.periods, start=1):
+    ws.row_dimensions[r0].height = 32 if rep.layout == "rows" else 18
+    for i, (label, cells, missing) in enumerate(rows, start=1):
         row = r0 + i
-        c = ws.cell(row=row, column=1, value=f"{p}\n{time_label}" if time_label else p)
+        c = ws.cell(row=row, column=1, value=label)
         c.font, c.fill, c.alignment, c.border = Font(name="Arial", bold=True), SUB_FILL, CENTER, BORDER
         max_lines = 2
-        for d in range(len(g.days)):
-            cell = ws.cell(row=row, column=d + 2)
+        for j, (text, miss) in enumerate(zip(cells, missing), start=2):
+            cell = ws.cell(row=row, column=j)
             cell.alignment, cell.border = CENTER, BORDER
-            if (d, p) in g.missing:
+            if miss:
                 cell.fill = MISSING_FILL
                 continue
-            entries = g.cells.get((d, p), [])
-            text = "\n—\n".join("\n".join(x for x in e if x) for e in entries)
-            cell.value = text or None
+            cell.value = text
             cell.font = Font(name="Arial", size=9)
-            max_lines = max(max_lines, text.count("\n") + 1)
+            if text:
+                max_lines = max(max_lines, text.count("\n") + 1)
         ws.row_dimensions[row].height = 15 * max_lines
     ws.column_dimensions["A"].width = max(ws.column_dimensions["A"].width or 0, 13)
-    for d in range(len(g.days)):
-        ws.column_dimensions[get_column_letter(d + 2)].width = 24
+    for j in range(len(heads)):
+        ws.column_dimensions[get_column_letter(j + 2)].width = 16 if rep.layout == "rows" else 24
     if g.footer:
-        ws.cell(row=r0 + len(g.periods) + 2, column=1, value=g.footer).font = Font(name="Arial", italic=True)
+        ws.cell(row=r0 + len(rows) + 2, column=1, value=g.footer).font = Font(name="Arial", italic=True)
 
 
 def _write_table(ws, rep: Report, t: Table, logo):

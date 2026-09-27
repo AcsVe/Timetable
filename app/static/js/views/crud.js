@@ -1,7 +1,7 @@
 // Config-driven setup screens for reference data.
 import * as api from '../api.js';
 import { t } from '../i18n.js';
-import { byId, canEdit, invalidate, isAdmin, list } from '../store.js';
+import { byId, canEdit, currentTimetable, invalidate, isAdmin, list } from '../store.js';
 import { confirmBox, h, nameOf, openForm, toast, toastError, put, swap } from '../ui.js';
 
 const DOW = [[7, 'الأحد'], [1, 'الاثنين'], [2, 'الثلاثاء'], [3, 'الأربعاء'], [4, 'الخميس'], [5, 'الجمعة'], [6, 'السبت']];
@@ -19,6 +19,8 @@ const OPTIONS = {
   buildings: async () => (await list('buildings')).map(o => ({ value: o.id, label: nameOf(o) })),
   subjects: async () => (await list('subjects')).map(o => ({ value: o.id, label: nameOf(o) })),
   'academic-years': async () => (await list('academic-years')).map(o => ({ value: o.id, label: o.name })),
+  teachers: async () => [...(await list('teachers'))].sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'ar'))
+    .map(o => ({ value: o.id, label: nameOf(o) })),
   users: async () => (isAdmin() ? (await list('users')).map(o => ({ value: o.id, label: `${o.display_name} (${o.email})` })) : []),
 };
 
@@ -44,7 +46,16 @@ const CONFIG = {
     { name: 'grade_id', label: 'الصف', type: 'select', ref: 'grades', required: true },
     { name: 'name_ar', label: 'الاسم (عربي)', required: true }, { name: 'name_en', label: 'الاسم (إنجليزي)' },
     { name: 'student_count', label: 'عدد الطلبة', type: 'number' },
-    { name: 'home_room_id', label: 'الغرفة الصفية', type: 'select', ref: 'rooms' }] },
+    { name: 'home_room_id', label: 'الغرفة الصفية', type: 'select', ref: 'rooms' },
+    { name: 'class_teacher_id', label: 'مربي الصف', type: 'select', ref: 'teachers' }],
+    columns: ['grade_id', 'name_ar', 'student_count', 'class_teacher_id', 'home_room_id'],
+    // Quick actions, like the buttons beside ASC's class list.
+    actions: [
+      { label: 'الجدول', go: s => goTo('#/grid', 'grid:view', { mode: 'section', entityId: s.id }) },
+      { label: 'الدروس', go: s => goTo('#/lessons', 'lessons:filter', { section: s.id }) },
+      { label: 'أوقات عدم التوفر', go: s => { sessionStorage.setItem('av:kind', 'section'); sessionStorage.setItem('av:entity', s.id); location.hash = '#/availability'; } },
+      { label: 'التقسيمات', go: s => { sessionStorage.setItem('div:section', s.id); location.hash = '#/setup/divisions'; } },
+    ] },
   subjects: { title: 'المباحث', fields: [
     { name: 'name_ar', label: 'الاسم (عربي)', required: true }, { name: 'name_en', label: 'الاسم (إنجليزي)' },
     { name: 'short_ar', label: 'اختصار (عربي)' }, { name: 'color', label: 'اللون', type: 'color' },
@@ -54,7 +65,8 @@ const CONFIG = {
     { name: 'room_ids', label: 'القاعات المسموحة', type: 'multi', ref: 'rooms' }] },
   teachers: { title: 'المعلمون', fields: [
     { name: 'name_ar', label: 'الاسم (عربي)', required: true }, { name: 'name_en', label: 'الاسم (إنجليزي)' },
-    { name: 'short', label: 'اختصار' }, { name: 'email', label: 'البريد الإلكتروني', type: 'email' },
+    { name: 'title', label: 'اللقب', placeholder: 'أ. / د. / م.' }, { name: 'short', label: 'اختصار' },
+    { name: 'email', label: 'البريد الإلكتروني', type: 'email' }, { name: 'phone', label: 'الهاتف' },
     { name: 'gender', label: 'الجنس', type: 'select', options: [{ value: 'm', label: 'ذكر' }, { value: 'f', label: 'أنثى' }] },
     { name: 'color', label: 'اللون', type: 'color' },
     { name: 'stage_ids', label: 'المراحل التي يدرّس فيها', type: 'multi', ref: 'stages' },
@@ -66,7 +78,13 @@ const CONFIG = {
     { name: 'max_consecutive', label: 'أقصى عدد من الحصص المتتالية', type: 'number', min: 0 },
     { name: 'max_days_per_week', label: 'أقصى عدد من أيام الدوام', type: 'number', min: 0 },
     { name: 'user_id', label: 'حساب المستخدم المرتبط', type: 'select', ref: 'users', adminOnly: true }],
-    columns: ['name_ar', 'short', 'stage_ids', 'subject_ids', 'target_weekly_periods'] },
+    columns: ['name_ar', 'short', 'stage_ids', 'subject_ids', 'target_weekly_periods'],
+    extraColumns: teacherCounts,
+    actions: [
+      { label: 'الجدول', go: x => goTo('#/grid', 'grid:view', { mode: 'teacher', entityId: x.id }) },
+      { label: 'الدروس', go: x => goTo('#/lessons', 'lessons:filter', { teacher: x.id }) },
+      { label: 'أوقات عدم التوفر', go: x => { sessionStorage.setItem('av:kind', 'teacher'); sessionStorage.setItem('av:entity', x.id); location.hash = '#/availability'; } },
+    ] },
   rooms: { title: 'القاعات', fields: [
     { name: 'name_ar', label: 'الاسم (عربي)', required: true }, { name: 'name_en', label: 'الاسم (إنجليزي)' },
     { name: 'short', label: 'اختصار' }, { name: 'building_id', label: 'المبنى', type: 'select', ref: 'buildings' },
@@ -102,6 +120,33 @@ const CONFIG = {
 };
 
 const NUMERIC_SELECT = new Set(['iso_dow']);
+
+function goTo(hash, key, value) {
+  sessionStorage.setItem(key, JSON.stringify(value));
+  location.hash = hash;
+}
+
+/** "Count" and "Time off" columns of ASC's teacher list, for the currently selected timetable. */
+async function teacherCounts() {
+  const tt = currentTimetable();
+  if (!tt) return [];
+  const [lessons, off] = await Promise.all([
+    api.get(`/api/timetables/${tt.id}/lessons`).then(r => r.items),
+    list('availability', `?timetable_id=${tt.id}&entity_type=teacher`)]);
+  const count = {}, placed = {}, offN = {};
+  for (const l of lessons) for (const x of l.teachers) {
+    count[x.teacher_id] = (count[x.teacher_id] || 0) + l.periods_per_week;
+    placed[x.teacher_id] = (placed[x.teacher_id] || 0) + l.cards.filter(c => c.weekday_id).reduce((a, c) => a + c.duration, 0);
+  }
+  for (const a of off) offN[a.entity_id] = (offN[a.entity_id] || 0) + 1;
+  return [
+    { label: t('عدد الحصص'), get: x => {
+      const n = count[x.id] || 0, target = x.target_weekly_periods;
+      return h('span', { class: target != null && n > target ? 'reasons' : '' }, `${n}${placed[x.id] !== undefined ? ` (${t('المُدرَج')} ${placed[x.id]})` : ''}`);
+    } },
+    { label: t('أوقات عدم التوفر'), get: x => (offN[x.id] ? h('span', { class: 'chip' }, offN[x.id]) : '—') },
+  ];
+}
 
 async function resolveFields(cfg) {
   const out = [];
@@ -144,15 +189,21 @@ export async function render(root, [res]) {
 
   const tableHost = h('div');
   async function draw() {
-    const items = await list(res, filterValue && filterField ? `?${cfg.filter}=${filterValue}` : '');
+    const [items, extra] = await Promise.all([
+      list(res, filterValue && filterField ? `?${cfg.filter}=${filterValue}` : ''),
+      cfg.extraColumns ? cfg.extraColumns().catch(() => []) : []]);
     const rows = items.map(item => h('tr', { dataset: { id: item.id } },
       columns.map(c => h('td', {}, fmt(fieldMap[c], item[c]))),
-      h('td', { style: { whiteSpace: 'nowrap' } }, canEdit() ? [
-        h('button', { class: 'btn small ghost', onclick: () => edit(item) }, t('تعديل')), ' ',
-        h('button', { class: 'btn small ghost', onclick: () => remove(item) }, t('حذف'))] : null)));
+      extra.map(x => h('td', {}, x.get(item))),
+      h('td', { class: 'row-actions' },
+        (cfg.actions || []).map(a => [h('button', { class: 'btn small ghost', onclick: () => a.go(item) }, t(a.label)), ' ']),
+        canEdit() ? [
+          h('button', { class: 'btn small ghost', onclick: () => edit(item) }, t('تعديل')), ' ',
+          h('button', { class: 'btn small ghost', onclick: () => remove(item) }, t('حذف'))] : null)));
     swap(tableHost, items.length
-      ? h('table', { class: 'data' }, h('thead', {}, h('tr', {}, columns.map(c => h('th', {}, fieldMap[c].label)), h('th'))),
-          h('tbody', {}, rows))
+      ? h('div', { class: 'grid-scroll' }, h('table', { class: 'data' }, h('thead', {}, h('tr', {}, columns.map(c => h('th', {}, fieldMap[c].label)),
+          extra.map(x => h('th', {}, x.label)), h('th'))),
+          h('tbody', {}, rows)))
       : h('p', { class: 'muted' }, t('لا توجد سجلات بعد')));
   }
 

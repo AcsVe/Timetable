@@ -120,3 +120,26 @@ def test_logo_rules(rep):
 def test_unknown_kind_and_bad_filter(rep):
     assert rep["api"].get(url(rep, "nope")).status_code == 404
     assert rep["api"].get(url(rep, "stats-teachers", teacher_id="xyz")).status_code == 400
+
+
+def test_class_teacher_subtitle_and_layouts(rep):
+    a = rep["api"]
+    sec = a.ok("get", f"/api/sections/{rep['s5a']}")
+    a.ok("patch", f"/api/sections/{sec['id']}", {"version": sec["version"], "class_teacher_id": rep["t2"]})
+    g = a.ok("get", url(rep, "section-timetable", section_id=rep["s5a"]))["grids"][0]
+    assert g["subtitle"] == "مربي الصف: سارة"
+    for layout, first_header in (("rows", "اليوم"), ("cols", "الحصة")):
+        r = a.get(url(rep, "section-timetable", section_id=rep["s5a"], format="xlsx", layout=layout))
+        ws = load_workbook(io.BytesIO(r.data)).active
+        assert first_header in [c.value for row in ws.iter_rows() for c in row]
+        r = a.get(url(rep, "section-timetable", section_id=rep["s5a"], format="pdf", layout=layout))
+        assert r.data.startswith(b"%PDF")
+
+
+def test_deleting_a_class_teacher_is_blocked(rep):
+    a = rep["api"]
+    sec = a.ok("get", f"/api/sections/{rep['s5b']}")
+    a.ok("patch", f"/api/sections/{sec['id']}", {"version": sec["version"], "class_teacher_id": rep["t_pe_m"]})
+    t = a.ok("get", f"/api/teachers/{rep['t_pe_m']}")
+    r = a.delete(f"/api/teachers/{t['id']}?version={t['version']}")
+    assert r.status_code == 409 and "section" in r.get_json()["details"]

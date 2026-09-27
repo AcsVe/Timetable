@@ -136,6 +136,7 @@ class Section(SyncMixin, db.Model):
     name_en: Mapped[str | None] = mapped_column(Text)
     student_count: Mapped[int | None] = mapped_column(Integer)
     home_room_id: Mapped[uuid.UUID | None] = uuid_fk("room.id", nullable=True)
+    class_teacher_id: Mapped[uuid.UUID | None] = uuid_fk("teacher.id", nullable=True)  # مربي الصف
     grade = relationship("Grade", back_populates="sections")
     divisions = relationship("Division", back_populates="section")
     __table_args__ = (live_unique("uq_section_grade_name_live", "grade_id", "name_ar"),)
@@ -259,6 +260,8 @@ class Teacher(SyncMixin, db.Model):
     name_en: Mapped[str | None] = mapped_column(Text)
     short: Mapped[str | None] = mapped_column(String(20))
     email: Mapped[str | None] = mapped_column(Text)
+    phone: Mapped[str | None] = mapped_column(String(30))
+    title: Mapped[str | None] = mapped_column(String(40))  # اللقب: أ.، د.، م.
     gender: Mapped[str | None] = mapped_column(enum("m", "f", name="gender"))
     color: Mapped[str | None] = mapped_column(String(9))
     user_id: Mapped[uuid.UUID | None] = uuid_fk("app_user.id", nullable=True)

@@ -53,6 +53,7 @@ table.data { width: 100%; border-collapse: collapse; background: var(--panel); b
 table.data th, table.data td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: start; vertical-align: middle; }
 table.data th { background: #f9fafb; font-weight: 700; font-size: .9rem; color: var(--muted); }
 table.data tr:last-child td { border-bottom: 0; }
+.row-actions { white-space: nowrap; }
 .chip { display: inline-block; padding: 1px 8px; border-radius: 99px; background: var(--accent-2); color: var(--accent);
   font-size: .82rem; margin: 1px; }
 .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: middle; border: 1px solid var(--line); }
@@ -105,6 +106,29 @@ dialog::backdrop { background: rgba(16,24,40,.45); }
 .tray.over { border-color: var(--accent); }
 .tray h3 { margin: 0 0 8px; font-size: .95rem; }
 .reasons { font-size: .8rem; color: var(--err); }
+/* days as rows (ASC print / SCL style) */
+.tt-grid.days-rows th.dayname { min-width: 84px; text-align: start; padding-inline: 8px; color: var(--ink); }
+.tt-grid .pnum { display: inline-block; min-width: 22px; padding: 1px 6px; border-radius: 99px; background: var(--accent-2);
+  color: var(--accent); font-weight: 700; }
+/* whole-school view (every section / teacher in rows) */
+.grid-wrap.stacked { flex-direction: column; }
+.grid-wrap.stacked .tray { width: 100%; min-height: 60px; display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; }
+.grid-wrap.stacked .tray h3 { width: 100%; }
+.tt-grid.whole { border-spacing: 0; }
+.tt-grid.whole th, .tt-grid.whole td { border: 1px solid var(--line); }
+.tt-grid.whole th.daygroup { background: var(--accent); color: #fff; }
+.tt-grid.whole th.pcol { font-size: .72rem; padding: 2px; color: var(--accent); background: var(--accent-2); }
+.tt-grid.whole th.rowhead { position: sticky; inset-inline-start: 0; z-index: 2; background: var(--panel); white-space: nowrap;
+  text-align: start; padding: 2px 8px; font-size: .8rem; color: var(--ink); }
+.tt-grid.whole td.slot { width: 58px; min-width: 58px; max-width: 58px; height: 34px; border-radius: 0; border-style: solid; padding: 1px; }
+.tt-grid.whole .daystart { border-inline-start: 3px solid var(--accent) !important; }
+.card-chip.mini { max-width: 56px; font-size: .68rem; padding: 1px 3px; margin-bottom: 1px; border-radius: 4px; line-height: 1.15; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis; }
+.card-chip.mini .lock { font-size: .55rem; top: 0; }
+.tray .card-chip.mini { min-width: 56px; }
+.subject-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: .82rem; }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; background: var(--panel); padding: 3px 9px; border-radius: 99px;
+  border: 1px solid var(--line); }
 .legend { font-size: .82rem; color: var(--muted); }
 
 /* availability grid */
@@ -130,6 +154,8 @@ dialog::backdrop { background: rgba(16,24,40,.45); }
 .report-grid td.none { background: #f2f4f7; }
 .report-grid .entry + .entry { border-top: 1px dashed var(--line); margin-top: 3px; padding-top: 3px; }
 .report-grid .ptime { display: block; font-weight: 400; font-size: .72rem; }
+.report-grid.days-rows td { height: 64px; min-width: 90px; }
+.report-grid.days-rows th.dayname { font-size: 1rem; }
 .report-table td.num { text-align: center; }
 .report-table tr.total td { font-weight: 700; background: var(--accent-2); }
 .logo-box { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }

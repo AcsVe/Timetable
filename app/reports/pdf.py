@@ -21,7 +21,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from app.reports.data import Grid, Report
+from app.reports.data import Grid, Report, grid_matrix
 from app.reports.data import Table as DataTable
 
 FONT_DIR = Path(__file__).resolve().parent / "fonts"
@@ -124,42 +124,53 @@ def _fmt(v, percent=False):
 
 def _grid_flowables(rep: Report, g: Grid, st, width) -> list:
     rtl = rep.rtl
-    n = len(g.days)
-    first_w = 2.6 * cm
-    day_w = (width - first_w) / max(n, 1)
-    cw = day_w - 8
-    head = [Paragraph(rich("الحصة" if rtl else "Period", rtl, True), st["head"])] + \
-           [Paragraph(rich(d, rtl, True, cw), st["head"]) for d in g.days]
-    data, missing_cells = [head], []
-    for i, (p, tl) in enumerate(g.periods, start=1):
-        row = [Paragraph(rich(f"{p}\n{tl}" if tl else str(p), rtl, True), st["cell"])]
-        for d in range(len(g.days)):
-            if (d, p) in g.missing:
-                row.append("")
-                missing_cells.append((d + 1, i))
-                continue
-            entries = g.cells.get((d, p), [])
-            text = "\n".join("\n".join(x for x in e if x) for e in entries)
-            row.append(Paragraph(rich(text, rtl, width=cw, size=8), st["cell"]) if text else "")
+    corner, heads, rows = grid_matrix(g, rep.layout, rtl)
+    n = len(heads)
+    first_w = (2.4 if rep.layout == "rows" else 2.6) * cm
+    col = (width - first_w) / max(n, 1)
+    cw = col - 8
+    size = 8 if n <= 7 else 7
+    data = [[Paragraph(rich(corner, rtl, True), st["head"])] +
+            [Paragraph(rich(x, rtl, True, cw, size), st["head"]) for x in heads]]
+    missing_cells = []
+    for i, (label, cells, missing) in enumerate(rows, start=1):
+        row = [Paragraph(rich(label, rtl, True), st["cell"])]
+        for j, (text, miss) in enumerate(zip(cells, missing)):
+            if miss:
+                missing_cells.append((j + 1, i))
+            row.append(Paragraph(rich(text, rtl, width=cw, size=size),
+                                 ParagraphStyle("c", parent=st["cell"], fontSize=size, leading=size + 3))
+                       if text and not miss else "")
         data.append(row)
-    col_w = [first_w] + [day_w] * n
+    col_w = [first_w] + [col] * n
     if rtl:
         data = [list(reversed(r)) for r in data]
         col_w = list(reversed(col_w))
         missing_cells = [(n - c, r) for c, r in missing_cells]
-    t = Table(data, colWidths=col_w, repeatRows=1)
+    # Days-as-rows pages: give each day row a generous, even height (ASC print style).
+    row_h = None
+    if rep.layout == "rows":
+        even = max(1.6 * cm, min(3.2 * cm, 11 * cm / max(len(rows), 1)))
+        row_h = [None]
+        for _label, cells, _m in rows:
+            lines = max([1] + [(x or "").count("\n") + 1 for x in cells])
+            row_h.append(max(even, (lines + 1) * (size + 3) * 1.15))
+    t = Table(data, colWidths=col_w, rowHeights=row_h, repeatRows=1)
+    label_col = n if rtl else 0
     style = [
         ("GRID", (0, 0), (-1, -1), 0.5, LINE),
         ("BACKGROUND", (0, 0), (-1, 0), ACCENT),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("BACKGROUND", (label_col, 1), (label_col, -1), LIGHT),
     ]
-    period_col = n if rtl else 0
-    style.append(("BACKGROUND", (period_col, 1), (period_col, -1), LIGHT))
     for c, r in missing_cells:
         style.append(("BACKGROUND", (c, r), (c, r), MISSING))
     t.setStyle(TableStyle(style))
-    out = [Paragraph(rich(g.title, rtl, True), st["sub"]), Spacer(1, 6), t]
+    out = [Paragraph(rich(g.title, rtl, True), st["sub"])]
+    if g.subtitle:
+        out.append(Paragraph(rich(g.subtitle, rtl), st["cell"]))
+    out += [Spacer(1, 6), t]
     if g.footer:
         out += [Spacer(1, 6), Paragraph(rich(g.footer, rtl), st["foot"])]
     return out

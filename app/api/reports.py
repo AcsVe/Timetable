@@ -39,7 +39,7 @@ def report(tt_id, kind):
         filters = parse_filters(request.args)
     except ValueError:
         raise ApiError("validation", 400, details={"reason": "invalid filter id"})
-    rep = build_report(tt, kind, lang, filters)
+    rep = build_report(tt, kind, lang, filters, request.args.get("layout", "rows"))
     if fmt == "json":
         return jsonify(rep.to_json())
     if fmt not in MIME:

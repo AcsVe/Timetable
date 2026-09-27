@@ -13,8 +13,8 @@ def open_grid(page, section_label):
 
 
 def cell(page, day_index, period):
-    """day_index: 0 = first school day column."""
-    return page.locator(f"table.tt-grid tbody tr:nth-child({period}) td.slot").nth(day_index)
+    """day_index: 0 = first school day (works for both layouts: days as rows or as columns)."""
+    return page.locator(f"table.tt-grid td.slot[data-di='{day_index}'][data-period='{period}']")
 
 
 def tray_chip(page, subject):
@@ -162,3 +162,53 @@ def test_logo_upload_from_school_page(page):
     page.set_input_files("#logo-file", files=[{"name": "logo.png", "mimeType": "image/png", "buffer": buf.getvalue()}])
     expect(page.locator("#toast")).to_contain_text("تم رفع الشعار")
     expect(page.locator("#school-logo")).to_be_visible()
+
+
+def test_orientation_toggle(page):
+    open_grid(page, "الخامس / أ")
+    expect(page.locator("table.tt-grid.days-rows")).to_be_visible()          # default: days as rows (ASC / SCL style)
+    page.select_option("#grid-orient", "cols")
+    expect(page.locator("table.tt-grid.days-rows")).to_have_count(0)
+    tray_chip(page, "الرياضيات").drag_to(cell(page, 2, 3))
+    expect(cell(page, 2, 3).locator(".card-chip")).to_contain_text("الرياضيات")
+    page.select_option("#grid-orient", "rows")
+    expect(cell(page, 2, 3).locator(".card-chip")).to_contain_text("الرياضيات")
+
+
+def test_whole_school_view_places_only_in_the_cards_rows(page):
+    page.goto(f"{page.base}/#/grid")
+    page.select_option("#grid-mode", "whole-sections")
+    expect(page.locator("table.tt-grid.whole tbody tr")).to_have_count(6)
+    page.select_option("#grid-stage", label="الأساسية")
+    expect(page.locator("table.tt-grid.whole tbody tr")).to_have_count(4)
+    rows = page.locator("table.tt-grid.whole tbody tr")
+    row_5a = rows.nth(0)
+    row_5b = rows.nth(1)
+    chip = page.locator(".tray .card-chip").first
+    chip.click()
+    # the first tray card belongs to 5/A: its row is coloured, 5/B's row is left alone
+    expect(row_5a.locator("td.slot.allowed").first).to_be_visible()
+    expect(row_5b.locator("td.slot.allowed")).to_have_count(0)
+    row_5b.locator("td.slot:not(.none)").first.click()
+    expect(page.locator("#toast")).to_contain_text("لا تخص")
+    row_5a.locator("td.slot.allowed").first.click()
+    expect(page.locator("#toast")).to_contain_text("تم وضع الحصة")
+    expect(page.locator("table.tt-grid.whole tbody tr").nth(0).locator(".card-chip")).to_have_count(1)
+
+
+def test_section_quick_actions_and_class_teacher(page):
+    page.goto(f"{page.base}/#/setup/sections")
+    row = page.locator("table.data tbody tr", has_text="أ").first
+    row.locator("button", has_text="تعديل").click()
+    page.select_option("#f-class_teacher_id", label="أحمد خليل")
+    page.click("#modal-form button[type=submit]")
+    expect(page.locator("table.data")).to_contain_text("أحمد خليل")
+    page.locator("table.data tbody tr", has_text="أحمد خليل").first.locator("button", has_text="الدروس").click()
+    expect(page).to_have_url(re.compile("#/lessons"))
+    expect(page.locator("table.data tbody tr[data-id]")).to_have_count(8)
+
+
+def test_teacher_list_shows_period_counts(page):
+    page.goto(f"{page.base}/#/setup/teachers")
+    row = page.locator("table.data tbody tr", has_text="سارة يوسف")
+    expect(row).to_contain_text("26")      # 4 basic sections × 4 + 2 secondary × 5

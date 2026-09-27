@@ -55,6 +55,25 @@ class Grid:
     cells: dict = field(default_factory=dict)        # (day_idx, period_no) -> list[list[str]]
     missing: set = field(default_factory=set)        # (day_idx, period_no) that don't exist that day
     footer: str | None = None
+    subtitle: str | None = None
+
+
+def grid_matrix(g: "Grid", layout: str, rtl: bool):
+    """Lay a grid out for printing. Returns (corner, column_headers, rows) where rows are
+    (row_label, [cell_text | None, ...], [missing_flags]). layout "rows" = days as rows (ASC print style)."""
+    period_label = lambda p, tl: f"{p}\n{tl}" if tl else str(p)  # noqa: E731
+    text = lambda d, p: "\n".join("\n".join(x for x in e if x) for e in g.cells.get((d, p), [])) or None  # noqa: E731
+    if layout == "cols":
+        corner = "الحصة" if rtl else "Period"
+        heads = list(g.days)
+        rows = [(period_label(p, tl), [text(d, p) for d in range(len(g.days))],
+                 [(d, p) in g.missing for d in range(len(g.days))]) for p, tl in g.periods]
+    else:
+        corner = "اليوم" if rtl else "Day"
+        heads = [period_label(p, tl) for p, tl in g.periods]
+        rows = [(day, [text(d, p) for p, _ in g.periods], [(d, p) in g.missing for p, _ in g.periods])
+                for d, day in enumerate(g.days)]
+    return corner, heads, rows
 
 
 @dataclass
@@ -78,6 +97,7 @@ class Report:
     generated_at: str
     grids: list[Grid] = field(default_factory=list)
     tables: list[Table] = field(default_factory=list)
+    layout: str = "rows"   # timetables: "rows" = days as rows (ASC print style), "cols" = days as columns
 
     @property
     def rtl(self) -> bool:
@@ -85,12 +105,13 @@ class Report:
 
     def to_json(self) -> dict:
         return {
-            "kind": self.kind, "lang": self.lang, "title": self.title, "school_name": self.school_name,
+            "kind": self.kind, "lang": self.lang, "layout": self.layout, "title": self.title, "school_name": self.school_name,
             "timetable_name": self.timetable_name, "filters": self.filters, "generated_at": self.generated_at,
             "grids": [{
                 "title": g.title, "days": g.days, "periods": [{"no": n, "time": t} for n, t in g.periods],
                 "cells": [{"day": d, "period": p, "entries": v} for (d, p), v in sorted(g.cells.items())],
                 "missing": [{"day": d, "period": p} for d, p in sorted(g.missing)], "footer": g.footer,
+                "subtitle": g.subtitle,
             } for g in self.grids],
             "tables": [{"title": t.title, "columns": t.columns, "rows": t.rows, "numeric": sorted(t.numeric),
                         "percent": sorted(t.percent), "totals": t.totals} for t in self.tables],
@@ -300,7 +321,11 @@ def section_grids(ctx: Ctx) -> list[Grid]:
                 lines.append(ctx.name(ctx.rooms.get(c.room_id)))
             return lines
         title = f"{ctx.L('الشعبة', 'Section')}: {ctx.section_label(sid)}"
-        grids.append(_grid_for(ctx, title, cards, entry, [ctx.sections[sid].grade_id]))
+        grid = _grid_for(ctx, title, cards, entry, [ctx.sections[sid].grade_id])
+        ct = ctx.teachers.get(ctx.sections[sid].class_teacher_id)
+        if ct:
+            grid.subtitle = f"{ctx.L('مربي الصف', 'Class teacher')}: {ctx.name(ct)}"
+        grids.append(grid)
     return grids
 
 
@@ -435,13 +460,13 @@ def stats_sections(ctx: Ctx) -> Table:
                          sum(r[4] for r in rows), None, sum(r[6] for r in rows)])
 
 
-def build_report(tt: Timetable, kind: str, lang: str, filters: dict) -> Report:
+def build_report(tt: Timetable, kind: str, lang: str, filters: dict, layout: str = "rows") -> Report:
     ctx = Ctx(tt, lang, filters)
     school = db.session.scalars(select(School)).first()
     rep = Report(
         kind=kind, lang=lang, title=TITLES[kind][1 if lang == "en" else 0],
         school_name=(school.name_en if lang == "en" and school and school.name_en else (school.name_ar if school else "")),
-        timetable_name=tt.name, filters=ctx.describe_filters(),
+        timetable_name=tt.name, filters=ctx.describe_filters(), layout=layout if layout in ("rows", "cols") else "rows",
         generated_at=datetime.now(ZoneInfo(os.environ.get("APP_TIMEZONE", "Asia/Amman"))).strftime("%Y-%m-%d %H:%M"),
     )
     if kind == "teacher-timetable":

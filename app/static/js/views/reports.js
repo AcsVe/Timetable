@@ -26,6 +26,7 @@ export async function render(root) {
   const gradeById = byId(grades);
   const saved = JSON.parse(sessionStorage.getItem('reports') || '{}');
   let kind = saved.kind || KINDS[0][0];
+  let layout = saved.layout || 'rows';
   const filters = saved.filters || {};
   const preview = h('div', { class: 'report-preview' });
   const filterHost = h('div', { class: 'toolbar' });
@@ -44,13 +45,18 @@ export async function render(root) {
   };
   const allowed = () => KINDS.find(k => k[0] === kind)[2];
   const query = (fmt, exportLang) => {
-    const q = new URLSearchParams({ format: fmt, lang: exportLang || lang });
+    const q = new URLSearchParams({ format: fmt, lang: exportLang || lang, layout });
     for (const k of allowed()) if (filters[k]) q.set(k, filters[k]);
     return `/api/timetables/${tt.id}/reports/${kind}?${q}`;
   };
-  const persist = () => sessionStorage.setItem('reports', JSON.stringify({ kind, filters }));
+  const persist = () => sessionStorage.setItem('reports', JSON.stringify({ kind, filters, layout }));
+  const isGridKind = () => kind.endsWith('-timetable');
 
+  const layoutSel = h('select', { id: 'report-layout', onchange: e => { layout = e.target.value; persist(); load(); } },
+    [['rows', t('الأيام صفوفاً')], ['cols', t('الأيام أعمدةً')]].map(([v, l]) => h('option', { value: v, selected: v === layout }, l)));
+  const layoutLabel = h('label', { class: 'inline' }, `${t('اتجاه الجدول')}:`, layoutSel);
   function drawFilters() {
+    layoutLabel.hidden = !isGridKind();
     for (const k of Object.keys(filters)) if (!allowed().includes(k)) delete filters[k];
     swap(filterHost, allowed().map(k => h('label', { class: 'inline' }, `${t(FILTER_LABELS[k])}:`,
       h('select', { dataset: { filter: k }, onchange: e => {
@@ -84,7 +90,7 @@ export async function render(root) {
     h('h1', { class: 'title no-print' }, `${t('التقارير')} — ${tt.name}`),
     h('div', { class: 'toolbar no-print' },
       h('label', { class: 'inline' }, `${t('التقرير')}:`, h('select', { id: 'report-kind', onchange: e => { kind = e.target.value; persist(); drawFilters(); load(); } },
-        KINDS.map(([v, l]) => h('option', { value: v, selected: v === kind }, t(l)))))),
+        KINDS.map(([v, l]) => h('option', { value: v, selected: v === kind }, t(l)))), layoutLabel)),
     h('div', { class: 'no-print' }, filterHost),
     h('div', { class: 'toolbar no-print' },
       h('button', { class: 'btn', id: 'export-xlsx', onclick: () => download('xlsx') }, t('تصدير Excel')),
@@ -104,17 +110,23 @@ function renderReport(rep) {
   for (const g of rep.grids) {
     const cells = new Map(g.cells.map(c => [`${c.day}|${c.period}`, c.entries]));
     const missing = new Set(g.missing.map(m => `${m.day}|${m.period}`));
+    const td = (di, p) => {
+      const key = `${di}|${p}`;
+      if (missing.has(key)) return h('td', { class: 'none' });
+      return h('td', {}, (cells.get(key) || []).map(e => h('div', { class: 'entry' },
+        h('b', {}, e[0]), e.slice(1).filter(Boolean).map(x => h('div', {}, x)))));
+    };
+    const pHead = p => [h('span', { class: 'pnum' }, String(p.no)), p.time ? h('span', { class: 'ptime', dir: 'ltr' }, p.time) : null];
+    const table = rep.layout === 'cols'
+      ? h('table', { class: 'data report-grid' },
+          h('thead', {}, h('tr', {}, h('th', {}, t('الحصة')), g.days.map(d => h('th', {}, d)))),
+          h('tbody', {}, g.periods.map(p => h('tr', {}, h('th', {}, pHead(p)), g.days.map((_, di) => td(di, p.no))))))
+      : h('table', { class: 'data report-grid days-rows' },
+          h('thead', {}, h('tr', {}, h('th', {}, t('اليوم')), g.periods.map(p => h('th', {}, pHead(p))))),
+          h('tbody', {}, g.days.map((d, di) => h('tr', {}, h('th', { class: 'dayname' }, d), g.periods.map(p => td(di, p.no))))));
     blocks.push(h('section', { class: 'report-block' }, h('h3', {}, g.title),
-      h('table', { class: 'data report-grid' },
-        h('thead', {}, h('tr', {}, h('th', {}, t('الحصة')), g.days.map(d => h('th', {}, d)))),
-        h('tbody', {}, g.periods.map(p => h('tr', {},
-          h('th', {}, String(p.no), p.time ? h('span', { class: 'ptime', dir: 'ltr' }, p.time) : null),
-          g.days.map((_, di) => {
-            const key = `${di}|${p.no}`;
-            if (missing.has(key)) return h('td', { class: 'none' });
-            return h('td', {}, (cells.get(key) || []).map(e => h('div', { class: 'entry' },
-              h('b', {}, e[0]), e.slice(1).filter(Boolean).map(x => h('div', {}, x)))));
-          }))))),
+      g.subtitle ? h('div', { class: 'muted' }, g.subtitle) : null,
+      h('div', { class: 'grid-scroll' }, table),
       g.footer ? h('p', { class: 'legend' }, g.footer) : null));
   }
   for (const tb of rep.tables) {
