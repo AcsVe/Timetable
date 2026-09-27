@@ -32,7 +32,7 @@ export async function render(root) {
     h('div', { class: 'stats' },
       h('div', { class: 'stat' }, h('b', { class: s.errors ? 'reasons' : '' }, s.errors), t('أخطاء')),
       h('div', { class: 'stat' }, h('b', {}, s.warnings), t('تحذيرات')),
-      h('div', { class: 'stat' }, h('b', {}, `${s.periods_placed} / ${s.periods_total}`), t('حصص موضوعة')),
+      h('div', { class: 'stat' }, h('b', {}, `${s.periods_placed} / ${s.periods_total}`), t('الحصص المُدرَجة')),
       h('div', { class: 'stat' }, h('b', {}, s.placed_ratio == null ? '—' : `${Math.round(s.placed_ratio * 100)}%`), t('نسبة الإنجاز'))),
     h('h2', {}, t('أخطاء')), issues(rep.errors, 'err'),
     h('h2', {}, t('تحذيرات')), issues(rep.warnings, 'warn'),

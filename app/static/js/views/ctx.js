@@ -50,6 +50,6 @@ export async function loadContext() {
 }
 
 export function noTimetable(root) {
-  put(root, h('p', { class: 'muted' }, t('لا يوجد جدول محدد. أنشئ جدولاً من صفحة "الجداول".')),
+  put(root, h('p', { class: 'muted' }, t('لم يُحدَّد جدول بعد. أنشئ جدولاً من صفحة "الجداول".')),
     h('a', { href: '#/timetables', class: 'btn' }, t('الجداول')));
 }

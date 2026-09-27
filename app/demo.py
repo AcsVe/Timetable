@@ -33,7 +33,7 @@ def seed_demo(app: Flask, admin_id: uuid.UUID) -> dict:
             slot += 1
             m += 45
             if p in brk_after:
-                out.append({"slot_no": slot, "kind": "break", "period_no": None, "label_ar": "الفسحة",
+                out.append({"slot_no": slot, "kind": "break", "period_no": None, "label_ar": "الاستراحة",
                             "starts_at": f"{m // 60:02d}:{m % 60:02d}", "ends_at": f"{(m + 20) // 60:02d}:{(m + 20) % 60:02d}"})
                 slot += 1
                 m += 20

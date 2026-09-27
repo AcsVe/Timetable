@@ -4,19 +4,19 @@ from __future__ import annotations
 from flask import jsonify
 
 MESSAGES = {
-    "unauthorized": ("يجب تسجيل الدخول", "Login required"),
-    "forbidden": ("لا تملك صلاحية على هذه المرحلة أو هذا الإجراء", "You do not have permission for this stage or action"),
+    "unauthorized": ("يلزم تسجيل الدخول", "Login required"),
+    "forbidden": ("لا تملك صلاحية تنفيذ هذا الإجراء أو العمل على هذه المرحلة", "You do not have permission for this stage or action"),
     "not_found": ("السجل غير موجود", "Record not found"),
     "validation": ("بيانات غير صالحة", "Invalid data"),
-    "version_conflict": ("عدّل مستخدم آخر هذا السجل؛ أعد التحميل ثم حاول مجدداً", "Record was changed by someone else; reload and retry"),
-    "idempotency_key_required": ("ترويسة Idempotency-Key مطلوبة لكل عملية تعديل", "Idempotency-Key header is required for every write"),
-    "idempotency_key_reused": ("نفس معرّف العملية استُخدم لطلب مختلف", "Idempotency key was reused for a different request"),
-    "idempotency_in_progress": ("نفس العملية قيد التنفيذ الآن", "The same request is already being processed"),
-    "has_dependents": ("لا يمكن الحذف: توجد سجلات مرتبطة به", "Cannot delete: other records depend on it"),
+    "version_conflict": ("عدّل مستخدمٌ آخر هذا السجل؛ أعد تحميل الصفحة ثم حاول مجدداً", "Record was changed by someone else; reload and retry"),
+    "idempotency_key_required": ("يلزم إرسال الترويسة Idempotency-Key مع كل عملية تعديل", "Idempotency-Key header is required for every write"),
+    "idempotency_key_reused": ("استُخدم معرّف العملية نفسه لطلب مختلف", "Idempotency key was reused for a different request"),
+    "idempotency_in_progress": ("العملية نفسها قيد التنفيذ الآن", "The same request is already being processed"),
+    "has_dependents": ("تعذّر الحذف: توجد سجلات مرتبطة بهذا السجل", "Cannot delete: other records depend on it"),
     "duplicate": ("السجل موجود مسبقاً", "Record already exists"),
-    "placement_conflict": ("لا يمكن وضع الحصة هنا بسبب تعارض", "Cannot place the card here due to a conflict"),
-    "timetable_readonly": ("هذا الجدول مؤرشف ولا يمكن تعديله", "This timetable is archived and read-only"),
-    "integrity": ("تعارض مع قيد في قاعدة البيانات", "Database constraint violated"),
+    "placement_conflict": ("تعذّر وضع الحصة هنا بسبب تعارض", "Cannot place the card here due to a conflict"),
+    "timetable_readonly": ("هذا الجدول مؤرشف، ولا يمكن تعديله", "This timetable is archived and read-only"),
+    "integrity": ("تعارضت العملية مع أحد قيود قاعدة البيانات", "Database constraint violated"),
 }
 
 

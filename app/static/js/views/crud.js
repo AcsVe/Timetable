@@ -48,8 +48,8 @@ const CONFIG = {
   subjects: { title: 'المباحث', fields: [
     { name: 'name_ar', label: 'الاسم (عربي)', required: true }, { name: 'name_en', label: 'الاسم (إنجليزي)' },
     { name: 'short_ar', label: 'اختصار (عربي)' }, { name: 'color', label: 'اللون', type: 'color' },
-    { name: 'max_teachers_per_block', label: 'أقصى عدد معلمين في نفس البطاقة', type: 'number', min: 1,
-      help: 'للأولاد/البنات أو الموسيقى/الدراما استخدم مجموعتين من نفس التقسيم بدل رفع هذا الرقم' },
+    { name: 'max_teachers_per_block', label: 'أقصى عدد من المعلمين في البطاقة الواحدة', type: 'number', min: 1,
+      help: 'لحصص الأولاد والبنات، أو الموسيقى والدراما، استخدم مجموعتين من التقسيم نفسه بدلاً من رفع هذا الرقم' },
     { name: 'requires_room_type', label: 'نوع القاعة المطلوب', placeholder: 'lab / gym / music' },
     { name: 'room_ids', label: 'القاعات المسموحة', type: 'multi', ref: 'rooms' }] },
   teachers: { title: 'المعلمون', fields: [
@@ -60,11 +60,11 @@ const CONFIG = {
     { name: 'stage_ids', label: 'المراحل التي يدرّس فيها', type: 'multi', ref: 'stages' },
     { name: 'subject_ids', label: 'المباحث المؤهّل لها', type: 'multi', ref: 'subjects' },
     { name: 'target_weekly_periods', label: 'النصاب الأسبوعي', type: 'number', min: 0 },
-    { name: 'max_periods_per_day', label: 'أقصى حصص يومياً', type: 'number', min: 0 },
-    { name: 'max_gaps_per_day', label: 'أقصى فراغات يومياً', type: 'number', min: 0 },
-    { name: 'max_gaps_per_week', label: 'أقصى فراغات أسبوعياً', type: 'number', min: 0 },
-    { name: 'max_consecutive', label: 'أقصى حصص متتالية', type: 'number', min: 0 },
-    { name: 'max_days_per_week', label: 'أقصى أيام دوام', type: 'number', min: 0 },
+    { name: 'max_periods_per_day', label: 'أقصى عدد من الحصص يومياً', type: 'number', min: 0 },
+    { name: 'max_gaps_per_day', label: 'أقصى عدد من الفجوات يومياً', type: 'number', min: 0 },
+    { name: 'max_gaps_per_week', label: 'أقصى عدد من الفجوات أسبوعياً', type: 'number', min: 0 },
+    { name: 'max_consecutive', label: 'أقصى عدد من الحصص المتتالية', type: 'number', min: 0 },
+    { name: 'max_days_per_week', label: 'أقصى عدد من أيام الدوام', type: 'number', min: 0 },
     { name: 'user_id', label: 'حساب المستخدم المرتبط', type: 'select', ref: 'users', adminOnly: true }],
     columns: ['name_ar', 'short', 'stage_ids', 'subject_ids', 'target_weekly_periods'] },
   rooms: { title: 'القاعات', fields: [
@@ -72,7 +72,7 @@ const CONFIG = {
     { name: 'short', label: 'اختصار' }, { name: 'building_id', label: 'المبنى', type: 'select', ref: 'buildings' },
     { name: 'room_type', label: 'نوع القاعة', placeholder: 'lab / gym / music' },
     { name: 'capacity', label: 'السعة', type: 'number' },
-    { name: 'is_shared', label: 'مشتركة (تتسع لأكثر من صف بنفس الوقت)', type: 'bool' }] },
+    { name: 'is_shared', label: 'مشتركة (تتّسع لأكثر من صف في الوقت نفسه)', type: 'bool' }] },
   buildings: { title: 'المباني', fields: [
     { name: 'name_ar', label: 'الاسم (عربي)', required: true }, { name: 'name_en', label: 'الاسم (إنجليزي)' }] },
   'academic-years': { title: 'السنوات الدراسية', fields: [
@@ -87,15 +87,15 @@ const CONFIG = {
   weekdays: { title: 'أيام الأسبوع', fields: [
     { name: 'iso_dow', label: 'اليوم', type: 'select', required: true, options: DOW.map(([v, l]) => ({ value: v, label: l })) },
     { name: 'name_ar', label: 'الاسم (عربي)', required: true }, { name: 'name_en', label: 'الاسم (إنجليزي)' },
-    { name: 'sort_order', label: 'الترتيب', type: 'number' }, { name: 'is_school_day', label: 'يوم دوام', type: 'bool' }] },
+    { name: 'sort_order', label: 'الترتيب', type: 'number' }, { name: 'is_school_day', label: 'يوم دراسي', type: 'bool' }] },
   users: { title: 'المستخدمون', fields: [
     { name: 'display_name', label: 'الاسم', required: true }, { name: 'email', label: 'البريد الإلكتروني', type: 'email', required: true },
     { name: 'role', label: 'الدور', type: 'select', required: true, options: [
       { value: 'admin', label: 'مدير النظام' }, { value: 'stage_editor', label: 'محرّر مرحلة' }, { value: 'viewer', label: 'مشاهد' }] },
     { name: 'stage_ids', label: 'المراحل المسموحة (لمحرّر المرحلة)', type: 'multi', ref: 'stages' },
-    { name: 'password', label: 'كلمة المرور', type: 'password', help: 'اتركها فارغة للإبقاء على الحالية (8 أحرف على الأقل)' },
-    { name: 'valid_until', label: 'صالح حتى (للحساب البديل المؤقت)', type: 'datetime' },
-    { name: 'is_active', label: 'فعّال', type: 'bool' },
+    { name: 'password', label: 'كلمة المرور', type: 'password', help: 'اتركها فارغةً للإبقاء على كلمة المرور الحالية (ثمانية أحرف على الأقل)' },
+    { name: 'valid_until', label: 'صالح حتى تاريخ (للحساب البديل المؤقت)', type: 'datetime' },
+    { name: 'is_active', label: 'مفعَّل', type: 'bool' },
     { name: 'preferred_lang', label: 'اللغة', type: 'select', required: true,
       options: [{ value: 'ar', label: 'العربية' }, { value: 'en', label: 'English' }] }],
     columns: ['display_name', 'email', 'role', 'stage_ids', 'valid_until', 'is_active'], defaults: { is_active: true, preferred_lang: 'ar', role: 'viewer' } },
@@ -173,7 +173,7 @@ export async function render(root, [res]) {
                                values: { ...(cfg.defaults || {}), ...(filterField && filterValue ? { [cfg.filter]: filterValue } : {}) },
                                onSubmit: v => save(v, null) });
   async function remove(item) {
-    if (!(await confirmBox(t('حذف هذا السجل؟')))) return;
+    if (!(await confirmBox(t('أتريد حذف هذا السجل؟')))) return;
     try {
       await api.del(`/api/${res}/${item.id}`, item.version);
       invalidate(res);
@@ -199,7 +199,7 @@ async function renderDivisions(root) {
   const sections = await sectionOptions();
   let sectionId = sessionStorage.getItem('div:section') || (sections[0] && sections[0].value) || '';
   const host = h('div');
-  const help = h('p', { class: 'muted' }, t('التقسيم يقسم الشعبة إلى مجموعات تُدرَّس في نفس الحصة، مثل: رياضة (أولاد / بنات) أو (موسيقى / دراما). مجموعات التقسيم الواحد يمكن أن تكون بنفس الحصة، أما مجموعات من تقسيمين مختلفين فتتعارض.'));
+  const help = h('p', { class: 'muted' }, t('يقسم التقسيمُ الشعبةَ إلى مجموعات تُدرَّس في الحصة نفسها، مثل: التربية الرياضية (أولاد / بنات)، أو (موسيقى / دراما). ويجوز أن تجتمع مجموعات التقسيم الواحد في حصة واحدة، أما مجموعات تقسيمين مختلفين فتتعارض.'));
 
   async function draw() {
     if (!sectionId) { swap(host, h('p', { class: 'muted' }, t('أضف شعبة أولاً'))); return; }
@@ -221,7 +221,7 @@ async function renderDivisions(root) {
   const refresh = async () => { invalidate('divisions', 'groups'); await draw(); };
   const addDivision = () => openForm({ title: t('تقسيم جديد'), fields: [
     { name: 'name', label: t('اسم التقسيم'), required: true, placeholder: t('أولاد/بنات') },
-    { name: 'groups', label: t('المجموعات (افصل بفاصلة)'), placeholder: t('أولاد، بنات'), full: true }],
+    { name: 'groups', label: t('المجموعات (افصل بينها بفاصلة)'), placeholder: t('أولاد، بنات'), full: true }],
     onSubmit: async v => {
       const d = await api.post('/api/divisions', { section_id: sectionId, name: v.name });
       for (const g of (v.groups || '').split(/[،,]/).map(s => s.trim()).filter(Boolean)) {
@@ -236,7 +236,7 @@ async function renderDivisions(root) {
   const rename = d => openForm({ title: t('تعديل'), fields: [{ name: 'name', label: t('اسم التقسيم'), required: true }],
     values: d, onSubmit: async v => { await api.patch(`/api/divisions/${d.id}`, { name: v.name, version: d.version }); await refresh(); } });
   async function remove(res, o) {
-    if (!(await confirmBox(t('حذف هذا السجل؟')))) return;
+    if (!(await confirmBox(t('أتريد حذف هذا السجل؟')))) return;
     try { await api.del(`/api/${res}/${o.id}`, o.version); await refresh(); } catch (e) { toastError(e); }
   }
 

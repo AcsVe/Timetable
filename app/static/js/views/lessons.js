@@ -40,7 +40,7 @@ export async function render(root) {
       { name: 'preferred_room_id', label: t('القاعة المفضلة'), type: 'select', options: ctx.rooms.map(r => ({ value: r.id, label: nameOf(r) })) },
       { name: 'teachers', label: t('المعلمون'), type: 'multi',
         options: [...ctx.teachers].sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'ar')).map(x => ({ value: x.id, label: nameOf(x) })) },
-      { name: 'targets', label: t('الشعب / المجموعات (اختيار أكثر من شعبة = درس مشترك)'), type: 'multi', options: targetOptions() },
+      { name: 'targets', label: t('الشعب / المجموعات (اختيار أكثر من شعبة يعني درساً مشتركاً)'), type: 'multi', options: targetOptions() },
       { name: 'notes', label: t('ملاحظات'), type: 'textarea' },
     ];
   }
@@ -54,7 +54,7 @@ export async function render(root) {
     let r;
     if (lesson) r = await api.patch(`/api/lessons/${lesson.id}`, { ...body, version: lesson.version });
     else r = await api.post('/api/lessons', { ...body, timetable_id: ctx.tt.id });
-    toast(r.cards_reset ? t('تم الحفظ — تغيّرت مدة البطاقة فأُعيد إنشاء البطاقات') : t('تم الحفظ'), 'ok');
+    toast(r.cards_reset ? t('تم الحفظ، وأُعيد إنشاء البطاقات لتغيّر مدتها') : t('تم الحفظ'), 'ok');
     await reload();
   }
   const add = () => openForm({ title: t('درس جديد'), fields: formFields(),
@@ -64,7 +64,7 @@ export async function render(root) {
   const edit = l => openForm({ title: t('تعديل الدرس'), fields: formFields(),
     values: { ...l, teachers: l.teachers.map(x => x.teacher_id), targets: encodeTargets(l) }, onSubmit: v => save(v, l) });
   async function remove(l) {
-    if (!(await confirmBox(t('حذف الدرس وكل بطاقاته من الجدول؟')))) return;
+    if (!(await confirmBox(t('أتريد حذف الدرس وجميع بطاقاته من الجدول؟')))) return;
     try { await api.del(`/api/lessons/${l.id}`, l.version); toast(t('تم الحذف'), 'ok'); await reload(); }
     catch (e) { toastError(e); }
   }
@@ -95,7 +95,7 @@ export async function render(root) {
     });
     swap(host, rows.length
       ? h('table', { class: 'data' }, h('thead', {}, h('tr', {},
-          [t('المبحث'), t('الشعب / المجموعات'), t('المعلمون'), t('حصص/أسبوع'), t('المدة'), t('الموضوع في الجدول'), ''].map(x => h('th', {}, x)))),
+          [t('المبحث'), t('الشعب / المجموعات'), t('المعلمون'), t('الحصص أسبوعياً'), t('المدة'), t('المُدرَج في الجدول'), ''].map(x => h('th', {}, x)))),
           h('tbody', {}, rows))
       : h('p', { class: 'muted' }, t('لا توجد دروس مطابقة')));
     drawLoads();
@@ -112,7 +112,7 @@ export async function render(root) {
       });
     swap(loadHost, rows.length ? h('details', {}, h('summary', {}, t('ملخص نصاب المعلمين')),
       h('table', { class: 'data', style: { marginTop: '8px', maxWidth: '520px' } },
-        h('thead', {}, h('tr', {}, [t('المعلم'), t('المُسند'), t('النصاب')].map(x => h('th', {}, x)))), h('tbody', {}, rows))) : '');
+        h('thead', {}, h('tr', {}, [t('المعلم'), t('المُسنَد'), t('النصاب')].map(x => h('th', {}, x)))), h('tbody', {}, rows))) : '');
   }
 
   const setF = (k, v) => { f[k] = v || undefined; sessionStorage.setItem('lessons:filter', JSON.stringify(f)); draw(); };

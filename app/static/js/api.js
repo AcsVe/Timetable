@@ -41,7 +41,7 @@ export async function get(url) {
     const cached = await cacheGet(url);
     setOffline(true);
     if (cached) return cached.data;
-    throw new ApiError(0, { message: t('لا يوجد اتصال ولا توجد نسخة محفوظة لهذه البيانات'),
+    throw new ApiError(0, { message: t('لا يوجد اتصال، ولا نسخة محفوظة من هذه البيانات'),
                              message_en: 'Offline and no saved copy of this data' });
   }
   if (res.status === 401) { location.href = '/auth/login?next=/'; throw new ApiError(401, {}); }

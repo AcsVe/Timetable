@@ -8,8 +8,8 @@
     <input id="email" name="email" type="email" value="{{ email or '' }}" autocomplete="username" required>
     <label for="password">كلمة المرور</label>
     <input id="password" name="password" type="password" autocomplete="current-password" required>
-    <button type="submit">دخول</button>
-    {% if error %}<p class="err">البريد أو كلمة المرور غير صحيحة، أو الحساب غير فعّال.</p>{% endif %}
+    <button type="submit">الدخول</button>
+    {% if error %}<p class="err">البريد الإلكتروني أو كلمة المرور غير صحيحة، أو أن الحساب غير مفعّل.</p>{% endif %}
   </form>
 </div>
 {% endblock %}

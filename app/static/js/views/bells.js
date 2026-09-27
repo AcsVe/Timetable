@@ -1,6 +1,6 @@
 // Bell schedules (timing templates) and which template applies to each grade on each day.
 import * as api from '../api.js';
-import { t } from '../i18n.js';
+import { countAr, t } from '../i18n.js';
 import { byId, canEdit, currentTimetable, invalidate, list } from '../store.js';
 import { confirmBox, h, nameOf, openForm, toast, toastError, put, swap } from '../ui.js';
 
@@ -30,7 +30,7 @@ export async function render(root) {
         h('tbody', {}, scheds.map(s => {
           const lessons = s.slots.filter(x => x.kind === 'lesson');
           return h('tr', {},
-            h('td', {}, nameOf(s)), h('td', {}, s.stage_id ? nameOf(st[s.stage_id]) : t('عام')),
+            h('td', {}, nameOf(s)), h('td', {}, s.stage_id ? nameOf(st[s.stage_id]) : t('عامّ لجميع المراحل')),
             h('td', {}, lessons.length), h('td', {}, s.slots[0]?.starts_at.slice(0, 5) || ''),
             h('td', {}, s.slots.at(-1)?.ends_at.slice(0, 5) || ''),
             h('td', { style: { whiteSpace: 'nowrap' } },
@@ -45,11 +45,11 @@ export async function render(root) {
   const newSchedule = () => openForm({ title: t('قالب توقيت جديد'), fields: [
     { name: 'name_ar', label: t('اسم القالب'), required: true, placeholder: t('دوام عادي') },
     { name: 'stage_id', label: t('المرحلة'), type: 'select', options: stageOpts() },
-    { name: 'start', label: t('بداية الحصة الأولى'), type: 'time', required: true },
+    { name: 'start', label: t('موعد بدء الحصة الأولى'), type: 'time', required: true },
     { name: 'count', label: t('عدد الحصص'), type: 'number', min: 1, max: 12, required: true },
-    { name: 'length', label: t('مدة الحصة (دقيقة)'), type: 'number', min: 10, required: true },
-    { name: 'breaks', label: t('فسحة بعد الحصص (مثال: 3,5)'), placeholder: '3' },
-    { name: 'break_length', label: t('مدة الفسحة (دقيقة)'), type: 'number', min: 5 }],
+    { name: 'length', label: t('مدة الحصة (بالدقائق)'), type: 'number', min: 10, required: true },
+    { name: 'breaks', label: t('استراحة بعد الحصص (مثال: 3، 5)'), placeholder: '3' },
+    { name: 'break_length', label: t('مدة الاستراحة (بالدقائق)'), type: 'number', min: 5 }],
     values: { start: '07:45', count: 7, length: 45, breaks: '3', break_length: 20, stage_id: stageId },
     onSubmit: async v => {
       const breaks = new Set(String(v.breaks || '').split(/[,،\s]+/).filter(Boolean).map(Number));
@@ -59,7 +59,7 @@ export async function render(root) {
         slots.push({ slot_no: slot++, kind: 'lesson', period_no: p, starts_at: toTime(m), ends_at: toTime(m + v.length) });
         m += v.length;
         if (breaks.has(p) && p < v.count) {
-          slots.push({ slot_no: slot++, kind: 'break', period_no: null, label_ar: t('الفسحة'), starts_at: toTime(m),
+          slots.push({ slot_no: slot++, kind: 'break', period_no: null, label_ar: t('الاستراحة'), starts_at: toTime(m),
                        ends_at: toTime(m + (v.break_length || 20)) });
           m += v.break_length || 20;
         }
@@ -76,7 +76,7 @@ export async function render(root) {
       invalidate('bell-schedules'); selectedSchedule = c; await drawSchedules(); drawEditor(); await drawAssignments();
     } });
   async function removeSchedule(s) {
-    if (!(await confirmBox(t('حذف هذا السجل؟')))) return;
+    if (!(await confirmBox(t('أتريد حذف هذا السجل؟')))) return;
     try { await api.del(`/api/bell-schedules/${s.id}`, s.version); invalidate('bell-schedules'); await drawSchedules(); }
     catch (e) { toastError(e); }
   }
@@ -97,7 +97,7 @@ export async function render(root) {
         h('td', {}, r.kind === 'lesson' ? `${t('الحصة')} ${r.period_no}` : ''),
         h('td', {}, h('select', { disabled: !canEdit(), onchange: e => { r.kind = e.target.value; drawRows(); } },
           h('option', { value: 'lesson', selected: r.kind === 'lesson' }, t('حصة')),
-          h('option', { value: 'break', selected: r.kind === 'break' }, t('فسحة')))),
+          h('option', { value: 'break', selected: r.kind === 'break' }, t('استراحة')))),
         h('td', {}, h('input', { value: r.label_ar || '', disabled: !canEdit(), oninput: e => { r.label_ar = e.target.value || null; } })),
         h('td', {}, h('input', { type: 'time', value: r.starts_at, disabled: !canEdit(), oninput: e => { r.starts_at = e.target.value; } })),
         h('td', {}, h('input', { type: 'time', value: r.ends_at, disabled: !canEdit(), oninput: e => { r.ends_at = e.target.value; } })),
@@ -106,7 +106,7 @@ export async function render(root) {
     function addRow(kind) {
       const last = rows.at(-1);
       const start = last ? toMin(last.ends_at) : 7 * 60 + 45;
-      rows.push({ kind, label_ar: kind === 'break' ? t('الفسحة') : null, starts_at: toTime(start),
+      rows.push({ kind, label_ar: kind === 'break' ? t('الاستراحة') : null, starts_at: toTime(start),
                   ends_at: toTime(start + (kind === 'lesson' ? 45 : 20)) });
       drawRows();
     }
@@ -127,7 +127,7 @@ export async function render(root) {
         ['', t('النوع'), t('التسمية'), t('من'), t('إلى'), ''].map(x => h('th', {}, x)))), body),
       canEdit() ? h('div', { class: 'toolbar', style: { marginTop: '10px' } },
         h('button', { class: 'btn ghost small', onclick: () => addRow('lesson') }, `+ ${t('حصة')}`),
-        h('button', { class: 'btn ghost small', onclick: () => addRow('break') }, `+ ${t('فسحة')}`),
+        h('button', { class: 'btn ghost small', onclick: () => addRow('break') }, `+ ${t('استراحة')}`),
         h('div', { class: 'spacer' }),
         h('button', { class: 'btn', onclick: saveSlots }, t('حفظ الحصص'))) : null));
   }
@@ -145,12 +145,12 @@ export async function render(root) {
       const a = find(gradeId, day.id);
       const sel = h('select', { disabled: !canEdit(), dataset: { grade: gradeId || '', day: day.id },
         onchange: e => setCell(gradeId, day, a, e.target.value) },
-        h('option', { value: '' }, gradeId ? t('— حسب المرحلة —') : t('— بدون —')),
+        h('option', { value: '' }, gradeId ? t('— وفق المرحلة —') : t('— بدون —')),
         opts.map(s => h('option', { value: s.id, selected: a && a.bell_schedule_id === s.id }, nameOf(s))));
       return h('td', {}, sel);
     };
     const rows = [
-      h('tr', {}, h('th', {}, t('كل صفوف المرحلة')), days.map(d => cell(null, d))),
+      h('tr', {}, h('th', {}, t('جميع صفوف المرحلة')), days.map(d => cell(null, d))),
       ...stageGrades.map(g => h('tr', {}, h('th', {}, nameOf(g)), days.map(d => cell(g.id, d)))),
     ];
 
@@ -165,7 +165,7 @@ export async function render(root) {
       try {
         const r = await api.post('/api/bell-assignments/bulk', { term_id: termId, stage_id: stageId,
           bell_schedule_id: bulkSched.value, weekday_ids, grade_ids: grade_ids.length ? grade_ids : null });
-        toast(`${t('تم التطبيق')}: ${r.created + r.updated}`, 'ok');
+        toast(`${t('تم التطبيق')}: ${countAr(r.created + r.updated, 'record')}`, 'ok');
         invalidate('bell-assignments'); await drawAssignments();
       } catch (e) { toastError(e); }
     }
@@ -174,11 +174,11 @@ export async function render(root) {
       h('table', { class: 'data bell-grid' }, h('thead', {}, h('tr', {}, h('th'), days.map(d => h('th', {}, nameOf(d))))),
         h('tbody', {}, rows)),
       canEdit() && opts.length ? h('div', { class: 'stat', style: { marginTop: '14px' } },
-        h('h3', {}, t('تطبيق قالب على عدة أيام وصفوف دفعة واحدة')),
+        h('h3', {}, t('تطبيق قالب على عدة أيام وصفوف دفعةً واحدة')),
         h('div', { class: 'toolbar' }, `${t('القالب')}:`, bulkSched),
         h('div', { class: 'toolbar' }, `${t('الأيام')}:`, dayChecks),
         h('div', { class: 'toolbar' }, `${t('الصفوف')}:`, gradeChecks,
-          h('span', { class: 'muted' }, t('(بدون اختيار = كل صفوف المرحلة)'))),
+          h('span', { class: 'muted' }, t('(عدم الاختيار يعني جميع صفوف المرحلة)'))),
         h('button', { class: 'btn', onclick: applyBulk }, t('تطبيق'))) : null);
   }
 
@@ -203,7 +203,7 @@ export async function render(root) {
 
   put(root, 
     h('h1', { class: 'title' }, t('توقيت الحصص')),
-    h('p', { class: 'muted' }, t('أنشئ قوالب توقيت (مثل: دوام عادي، يوم قصير)، ثم حدّد القالب لكل يوم ولكل صف. الصف الذي لا يُحدَّد له قالب يأخذ قالب مرحلته. تعارض المعلمين يُحسب على رقم الحصة وليس على الوقت.')),
+    h('p', { class: 'muted' }, t('أنشئ قوالب التوقيت (مثل: دوام عادي، يوم قصير)، ثم حدِّد القالب لكل يوم ولكل صف. والصف الذي لا يُحدَّد له قالب يأخذ قالب مرحلته. ويُحتسَب تعارض المعلمين على رقم الحصة لا على وقتها.')),
     h('h2', {}, t('قوالب التوقيت')), schedHost, editorHost,
     h('h2', { style: { marginTop: '24px' } }, t('التوقيت لكل يوم وصف')),
     h('div', { class: 'toolbar' }, `${t('الفصل')}:`, termSel, `${t('المرحلة')}:`, stageSel),

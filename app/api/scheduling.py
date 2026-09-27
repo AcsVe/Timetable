@@ -13,6 +13,7 @@ from app.api.crud import check_version
 from app.api.idempotency import write_endpoint
 from app.api.serialize import parse_uuid, require_int
 from app.auth.permissions import require_admin, require_write
+from app.arabic import count
 from app.errors import ApiError
 from app.extensions import db
 from app.models import (
@@ -113,8 +114,8 @@ def _parse_teachers(data, subject: Subject) -> list[tuple[uuid.UUID, str]]:
     if len(out) > subject.max_teachers_per_block:
         raise ApiError("validation", 400, details={
             "field": "teachers", "reason": "too_many_teachers", "max": subject.max_teachers_per_block,
-            "message": f"مبحث {subject.name_ar} يسمح بـ {subject.max_teachers_per_block} معلم في نفس البلوك؛ "
-                       f"للأولاد/البنات استخدم مجموعتين من نفس التقسيم",
+            "message": f"يسمح مبحث {subject.name_ar} بـ{count(subject.max_teachers_per_block, 'teacher')} في البطاقة الواحدة؛ "
+                       f"ولحصص الأولاد والبنات استخدم مجموعتين من التقسيم نفسه",
         })
     return out
 
@@ -397,7 +398,7 @@ def update_card(id_):
     unlock = data.get("is_locked") is False
     if card.is_locked and moving and not unlock:
         raise ApiError("validation", 409, details={"reason": "card_locked"},
-                       message="الحصة مقفلة؛ ألغِ القفل أولاً", message_en="Card is locked; unlock it first")
+                       message="الحصة مقفلة؛ ألغِ قفلها أولاً", message_en="Card is locked; unlock it first")
     if wd is not None and room is None and card.room_id is None and card.lesson.preferred_room_id:
         room = card.lesson.preferred_room_id
     if wd is not None and moving:
@@ -473,7 +474,7 @@ def publish_timetable(id_):
     if report["errors"] and not data.get("force"):
         raise ApiError("validation", 409, details={"reason": "timetable_has_errors", "summary": report["summary"],
                                                      "errors": report["errors"][:50]},
-                       message="لا يمكن النشر: الجدول يحتوي أخطاء. أصلحها أو انشر مع force",
+                       message="تعذّر النشر: في الجدول أخطاء. أصلحها أولاً، أو انشره متجاوزاً إياها",
                        message_en="Cannot publish: the timetable has errors. Fix them or publish with force")
     for other in db.session.scalars(select(Timetable).where(
             Timetable.term_id == tt.term_id, Timetable.status == "published", Timetable.id != tt.id)):

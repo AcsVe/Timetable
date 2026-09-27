@@ -44,7 +44,7 @@ export async function render(root) {
                            title: r ? t('غير متاح') : t('متاح'),
                            onclick: editable ? () => toggle(d.id, p, r) : null }, r ? '✕' : '');
         }))))),
-      h('p', { class: 'legend' }, t('اضغط على الخانة لتبديلها بين متاح / غير متاح. الحصص لا توضع في خانة غير متاحة.')));
+      h('p', { class: 'legend' }, t('انقر على الخانة للتبديل بين «متاح» و«غير متاح». لا تُوضَع الحصص في الخانات غير المتاحة.')));
   }
   async function toggle(dayId, period, row) {
     try {

@@ -32,6 +32,7 @@ from app.models import (
     Timetable,
     Weekday,
 )
+from app.arabic import g, teacher_title
 from app.rules.bells import BellCache
 
 
@@ -115,7 +116,7 @@ class PlacementChecker:
             return [Conflict("unknown_weekday", "يوم غير معروف", "Unknown weekday")]
         self._weekdays[weekday_id] = wd
         if not wd.is_school_day:
-            return [Conflict("not_school_day", f"{wd.name_ar} ليس يوم دوام", f"{wd.name_en or wd.name_ar} is not a school day")]
+            return [Conflict("not_school_day", f"يوم {wd.name_ar} ليس يوماً دراسياً", f"{wd.name_en or wd.name_ar} is not a school day")]
         return []
 
     def _check_bells(self, targets, weekday_id, period_no, duration):
@@ -128,7 +129,7 @@ class PlacementChecker:
             periods = self.bells.periods(grade, weekday_id)
             if periods is None:
                 out.append(Conflict("no_bell_schedule",
-                                    f"لا يوجد توقيت حصص للصف {grade.name_ar} في هذا اليوم",
+                                    f"لم يُحدَّد توقيت حصص للصف {grade.name_ar} في هذا اليوم",
                                     f"No bell schedule for grade {grade.name_en or grade.name_ar} on this day",
                                     extra={"grade_id": grade.id}))
                 continue
@@ -136,13 +137,13 @@ class PlacementChecker:
             missing = [p for p in needed if p not in periods]
             if missing:
                 out.append(Conflict("period_not_in_schedule",
-                                    f"الحصة {missing[0]} غير موجودة في توقيت الصف {grade.name_ar} لهذا اليوم",
+                                    f"لا توجد الحصة {missing[0]} في توقيت الصف {grade.name_ar} لهذا اليوم",
                                     f"Period {missing[0]} does not exist for grade {grade.name_en or grade.name_ar} on this day",
                                     extra={"grade_id": grade.id, "period_no": missing[0]}))
                 continue
             first = periods[period_no]
             if any(periods[p] != first + i for i, p in enumerate(needed)):
-                out.append(Conflict("crosses_break", "الحصة المزدوجة لا يمكن أن تتخلّلها فسحة",
+                out.append(Conflict("crosses_break", "لا يجوز أن تتخلّل الاستراحةُ الحصةَ المزدوجة",
                                     "A double lesson cannot span a break", extra={"grade_id": grade.id}))
         return out
 
@@ -164,7 +165,7 @@ class PlacementChecker:
         out = []
         for r in rows:
             name = self._entity_name(r.entity_type, r.entity_id)
-            out.append(Conflict("unavailable", f"{name}: غير متاح في الحصة {r.period_no}",
+            out.append(Conflict("unavailable", f"{name}: {self._unavailable_word(r.entity_type, r.entity_id)} في الحصة {r.period_no}",
                                 f"{name}: unavailable in period {r.period_no}",
                                 extra={"entity_type": r.entity_type, "entity_id": r.entity_id, "period_no": r.period_no}))
         return out
@@ -190,7 +191,7 @@ class PlacementChecker:
         for occ in self._occ_query(rtype, ids, weekday_id, period_no, duration, week_no, exclude):
             t = db.session.get(Teacher, occ.resource_id)
             desc = self._card_desc(occ.card_id)
-            out.append(Conflict("teacher_busy", f"المعلم {t.name_ar} مشغول في هذه الحصة ({desc})",
+            out.append(Conflict("teacher_busy", f"{teacher_title(t.gender)} {t.name_ar} {g(t.gender, 'مشغول', 'مشغولة')} في هذه الحصة ({desc})",
                                 f"Teacher {t.name_en or t.name_ar} is busy at this time ({desc})",
                                 other_card_id=occ.card_id, extra={"teacher_id": t.id}))
         return out
@@ -205,7 +206,7 @@ class PlacementChecker:
         subject = db.session.get(Subject, lesson.subject_id)
         if subject.requires_room_type and room.room_type != subject.requires_room_type:
             out.append(Conflict("room_type_mismatch",
-                                f"مبحث {subject.name_ar} يحتاج قاعة من نوع {subject.requires_room_type}",
+                                f"يتطلّب مبحث {subject.name_ar} قاعةً من نوع {subject.requires_room_type}",
                                 f"{subject.name_en or subject.name_ar} requires a {subject.requires_room_type} room"))
         if subject.rooms and room not in subject.rooms:
             out.append(Conflict("room_not_allowed", f"القاعة {room.name_ar} غير مخصّصة لمبحث {subject.name_ar}",
@@ -251,7 +252,7 @@ class PlacementChecker:
             label = _section_label(sec)
             if other_group is not None:
                 label += f" ({other_group.name_ar})"
-            out.append(Conflict("class_busy", f"الشعبة {label} لديها حصة أخرى في هذا الوقت ({self._card_desc(card.id)})",
+            out.append(Conflict("class_busy", f"لدى الشعبة {label} حصة أخرى في هذا الوقت ({self._card_desc(card.id)})",
                                 f"Section {label} already has a lesson at this time",
                                 other_card_id=card.id, extra={"section_id": sec.id}))
         return out
@@ -269,8 +270,17 @@ class PlacementChecker:
             return kind
         if isinstance(obj, Section):
             return "الشعبة " + _section_label(obj)
-        prefix = {"teacher": "المعلم ", "subject": "المبحث ", "room": "القاعة "}[kind]
+        if isinstance(obj, Teacher):
+            return f"{teacher_title(obj.gender)} {obj.name_ar}"
+        prefix = {"subject": "المبحث ", "room": "القاعة "}[kind]
         return prefix + obj.name_ar
+
+    def _unavailable_word(self, kind, id_) -> str:
+        """Agreement: المعلم غير متاح / المعلمة غير متاحة / الشعبة غير متاحة / القاعة غير متاحة."""
+        if kind == "teacher":
+            t = db.session.get(Teacher, id_)
+            return g(t.gender if t else None, "غير متاح", "غير متاحة")
+        return "غير متاح" if kind == "subject" else "غير متاحة"
 
 
 # ---------------------------------------------------------------------------

@@ -56,10 +56,10 @@ export async function render(root) {
       draggable: editable && !card.is_locked && !continuation ? 'true' : null,
       dataset: { card: card.id }, title: [nameOf(subj), sub, room].filter(Boolean).join('\n'),
     },
-      h('div', { class: 'subj' }, subj?.short_ar || nameOf(subj), continuation ? ` (${t('تابع')})` : ''),
+      h('div', { class: 'subj' }, subj?.short_ar || nameOf(subj), continuation ? ` (${t('تتمّة')})` : ''),
       h('div', {}, sub), room ? h('div', { class: 'muted' }, room) : null,
       !continuation && (card.is_locked || editable) ? h('span', {
-        class: 'lock', role: 'button', title: card.is_locked ? t('مقفلة — اضغط لإلغاء القفل') : t('اضغط للقفل'),
+        class: 'lock', role: 'button', title: card.is_locked ? t('مقفلة — انقر لإلغاء القفل') : t('انقر لقفل الحصة'),
         style: { opacity: card.is_locked ? 1 : .25, cursor: editable ? 'pointer' : 'default' },
         onclick: e => { e.stopPropagation(); if (editable) toggleLock(card); } }, '🔒') : null);
     if (editable && !continuation) {
@@ -71,11 +71,11 @@ export async function render(root) {
   }
 
   async function pick(card, el) {
-    if (card.is_locked) { toast(t('الحصة مقفلة؛ ألغِ القفل أولاً'), 'err'); return; }
+    if (card.is_locked) { toast(t('الحصة مقفلة؛ ألغِ قفلها أولاً'), 'err'); return; }
     unpick();
     picked = card;
     el.classList.add('dragging');
-    info.textContent = t('اختر خانة خضراء لوضع الحصة، أو أفلتها في صندوق "غير موضوعة" لإزالتها من الجدول.');
+    info.textContent = t('اختر خانةً خضراء لوضع الحصة فيها، أو أفلِتها في صندوق "غير مُدرَجة" لإزالتها من الجدول.');
     try {
       const r = await api.get(`/api/cards/${card.id}/allowed-slots`);
       if (picked !== card) return;
@@ -149,8 +149,8 @@ export async function render(root) {
           return td;
         })))));
     const unplaced = cards.filter(c => !c.weekday_id);
-    const tray = h('div', { class: 'tray' }, h('h3', {}, `${t('غير موضوعة')} (${unplaced.length})`),
-      unplaced.length ? unplaced.map(c => chip(c)) : h('p', { class: 'muted tray-hint' }, t('كل الحصص موضوعة')));
+    const tray = h('div', { class: 'tray' }, h('h3', {}, `${t('غير مُدرَجة')} (${unplaced.length})`),
+      unplaced.length ? unplaced.map(c => chip(c)) : h('p', { class: 'muted tray-hint' }, t('أُدرِجت الحصص كلها')));
     if (editable) {
       tray.addEventListener('dragover', e => { if (picked && picked.weekday_id) { e.preventDefault(); tray.classList.add('over'); } });
       tray.addEventListener('dragleave', () => tray.classList.remove('over'));
@@ -160,7 +160,7 @@ export async function render(root) {
     const total = cards.reduce((a, c) => a + c.duration, 0);
     const placed = cards.filter(c => c.weekday_id).reduce((a, c) => a + c.duration, 0);
     swap(gridHost, h('div', { class: 'grid-scroll' }, table,
-      h('p', { class: 'legend' }, `${t('الموضوع')}: ${placed} / ${total} · ${t('اسحب الحصة أو اضغط عليها ثم اضغط على خانة. الخانات الخضراء مسموحة، والحمراء فيها تعارض (مرّر المؤشر لمعرفة السبب).')}`)),
+      h('p', { class: 'legend' }, `${t('المُدرَج')}: ${placed} / ${total} · ${t('اسحب الحصة، أو انقر عليها ثم انقر على الخانة المطلوبة. الخانات الخضراء متاحة، والحمراء فيها تعارض (مرِّر المؤشر فوقها لمعرفة السبب).')}`)),
       tray);
   }
 

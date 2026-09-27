@@ -3,93 +3,93 @@
 //   captureStaticText()   → remembers the Arabic text of the static page once
 //   setLang('en' | 'ar')  → switches direction + static text, then notifies views to re-render
 const I18N = {
-  '(بدون اختيار = كل صفوف المرحلة)': '(none selected = every grade in the stage)',
+  '(عدم الاختيار يعني جميع صفوف المرحلة)': '(none selected = every grade in the stage)',
   'أخطاء': 'Errors', 'أضف شعبة أولاً': 'Add a section first',
   'أضف فصلاً دراسياً ومرحلة أولاً': 'Add a term and a stage first',
-  'أقصى أيام دوام': 'Max working days', 'أقصى حصص متتالية': 'Max consecutive periods',
-  'أقصى حصص يومياً': 'Max periods per day', 'أقصى عدد معلمين في نفس البطاقة': 'Max teachers on one card',
-  'أقصى فراغات أسبوعياً': 'Max gaps per week', 'أقصى فراغات يومياً': 'Max gaps per day', 'أنثى': 'Female',
-  'أنشئ قوالب توقيت (مثل: دوام عادي، يوم قصير)، ثم حدّد القالب لكل يوم ولكل صف. الصف الذي لا يُحدَّد له قالب يأخذ قالب مرحلته. تعارض المعلمين يُحسب على رقم الحصة وليس على الوقت.':
+  'أقصى عدد من أيام الدوام': 'Max working days', 'أقصى عدد من الحصص المتتالية': 'Max consecutive periods',
+  'أقصى عدد من الحصص يومياً': 'Max periods per day', 'أقصى عدد من المعلمين في البطاقة الواحدة': 'Max teachers on one card',
+  'أقصى عدد من الفجوات أسبوعياً': 'Max gaps per week', 'أقصى عدد من الفجوات يومياً': 'Max gaps per day', 'أنثى': 'Female',
+  'أنشئ قوالب التوقيت (مثل: دوام عادي، يوم قصير)، ثم حدِّد القالب لكل يوم ولكل صف. والصف الذي لا يُحدَّد له قالب يأخذ قالب مرحلته. ويُحتسَب تعارض المعلمين على رقم الحصة لا على وقتها.':
     'Create timing templates (e.g. normal day, short day), then choose the template for each day and grade. A grade without its own template uses its stage\'s. Teacher clashes are checked by period number, not clock time.',
   'أوقات عدم التوفر': 'Unavailable times', 'أولاد/بنات': 'Boys/Girls', 'أولاد، بنات': 'Boys, Girls',
   'أيام الأسبوع': 'Weekdays', 'أُزيلت الحصة من الجدول': 'Card removed from the timetable', 'إضافة': 'Add',
   'إعادة الفحص': 'Re-check', 'إلغاء': 'Cancel', 'إلى': 'To',
-  'اتركها فارغة للإبقاء على الحالية (8 أحرف على الأقل)': 'Leave empty to keep the current one (min 8 characters)',
-  'اختر خانة خضراء لوضع الحصة، أو أفلتها في صندوق "غير موضوعة" لإزالتها من الجدول.':
+  'اتركها فارغةً للإبقاء على كلمة المرور الحالية (ثمانية أحرف على الأقل)': 'Leave empty to keep the current one (min 8 characters)',
+  'اختر خانةً خضراء لوضع الحصة فيها، أو أفلِتها في صندوق "غير مُدرَجة" لإزالتها من الجدول.':
     'Choose a green cell to place the card, or drop it in "Unplaced" to remove it from the timetable.',
   'اختر قالباً ويوماً واحداً على الأقل': 'Choose a template and at least one day',
   'اختر من القائمة': 'Choose from the list', 'اختر من القائمة لعرض الجدول': 'Choose from the list to show the timetable',
   'اختصار': 'Short', 'اختصار (عربي)': 'Short (Arabic)',
-  'اسحب الحصة أو اضغط عليها ثم اضغط على خانة. الخانات الخضراء مسموحة، والحمراء فيها تعارض (مرّر المؤشر لمعرفة السبب).':
+  'اسحب الحصة، أو انقر عليها ثم انقر على الخانة المطلوبة. الخانات الخضراء متاحة، والحمراء فيها تعارض (مرِّر المؤشر فوقها لمعرفة السبب).':
     'Drag a card, or tap it then tap a cell. Green cells are allowed; red cells have a conflict (hover to see why).',
   'اسم التقسيم': 'Division name', 'اسم القالب': 'Template name', 'اسم المدرسة (إنجليزي)': 'School name (English)',
   'اسم المدرسة (عربي)': 'School name (Arabic)', 'اسم المسودة الجديدة': 'New draft name',
-  'اضغط على الخانة لتبديلها بين متاح / غير متاح. الحصص لا توضع في خانة غير متاحة.':
+  'انقر على الخانة للتبديل بين «متاح» و«غير متاح». لا تُوضَع الحصص في الخانات غير المتاحة.':
     'Click a cell to toggle available / unavailable. Cards cannot be placed in unavailable cells.',
-  'اضغط للقفل': 'Click to lock',
-  'اعمل على مسودة، ثم انشرها. النشر يؤرشف الجدول المنشور سابقاً لنفس الفصل، والمؤرشف للقراءة فقط.':
+  'انقر لقفل الحصة': 'Click to lock',
+  'اعمل على مسودة ثم انشرها. ويؤدي النشر إلى أرشفة الجدول المنشور سابقاً للفصل نفسه، والجدول المؤرشف للقراءة فقط.':
     'Work on a draft, then publish it. Publishing archives the previously published timetable of the term; archived timetables are read-only.',
   'الأيام': 'Days', 'الإعداد': 'Setup', 'الاسم': 'Name', 'الاسم (إنجليزي)': 'Name (English)', 'الاسم (عربي)': 'Name (Arabic)',
   'البريد الإلكتروني': 'Email', 'التحقق': 'Validation', 'الترتيب': 'Order', 'التسمية': 'Label',
-  'التقسيم يقسم الشعبة إلى مجموعات تُدرَّس في نفس الحصة، مثل: رياضة (أولاد / بنات) أو (موسيقى / دراما). مجموعات التقسيم الواحد يمكن أن تكون بنفس الحصة، أما مجموعات من تقسيمين مختلفين فتتعارض.':
+  'يقسم التقسيمُ الشعبةَ إلى مجموعات تُدرَّس في الحصة نفسها، مثل: التربية الرياضية (أولاد / بنات)، أو (موسيقى / دراما). ويجوز أن تجتمع مجموعات التقسيم الواحد في حصة واحدة، أما مجموعات تقسيمين مختلفين فتتعارض.':
     'A division splits a section into groups taught in the same period, e.g. PE (boys / girls) or (music / drama). Groups of one division may share a period; groups of different divisions conflict.',
   'التقسيمات والمجموعات': 'Divisions & groups', 'التوقيت لكل يوم وصف': 'Timing per day and grade', 'الجداول': 'Timetables',
-  'الجداول (مسودة/منشور)': 'Timetables (draft/published)', 'الجدول يحتوي أخطاء': 'The timetable has errors',
+  'الجداول (المسودّات والمنشورة)': 'Timetables (draft/published)', 'في الجدول أخطاء': 'The timetable has errors',
   'الجدول:': 'Timetable:', 'الجنس': 'Gender', 'الحالة': 'Status', 'الحصة': 'Period',
-  'الحصة مقفلة؛ ألغِ القفل أولاً': 'Card is locked; unlock it first', 'الحقل': 'Field', 'الدروس والتوزيع': 'Lessons & allocation',
+  'الحصة مقفلة؛ ألغِ قفلها أولاً': 'Card is locked; unlock it first', 'الحقل': 'Field', 'الدروس والتوزيع': 'Lessons & allocation',
   'الدور': 'Role', 'السعة': 'Capacity', 'السنة الحالية': 'Current year', 'السنة الدراسية': 'Academic year',
   'السنوات الدراسية': 'Academic years', 'الشعب': 'Sections', 'الشعب / المجموعات': 'Sections / groups',
-  'الشعب / المجموعات (اختيار أكثر من شعبة = درس مشترك)': 'Sections / groups (several sections = joint lesson)',
+  'الشعب / المجموعات (اختيار أكثر من شعبة يعني درساً مشتركاً)': 'Sections / groups (several sections = joint lesson)',
   'الشعبة': 'Section', 'الصف': 'Grade', 'الصفحة غير موجودة': 'Page not found', 'الصفوف': 'Grades', 'العربية': 'Arabic',
-  'الغرفة الصفية': 'Home room', 'الفسحة': 'Break', 'الفصل': 'Term', 'الفصل الدراسي': 'Term', 'الفصول الدراسية': 'Terms',
+  'الغرفة الصفية': 'Home room', 'الاستراحة': 'Break', 'الفصل': 'Term', 'الفصل الدراسي': 'Term', 'الفصول الدراسية': 'Terms',
   'القائمة': 'Menu', 'القاعات': 'Rooms', 'القاعات المسموحة': 'Allowed rooms', 'القاعة المفضلة': 'Preferred room',
   'القالب': 'Template', 'الكل': 'All', 'اللغة': 'Language', 'اللون': 'Colour', 'المباحث': 'Subjects',
   'المباحث المؤهّل لها': 'Qualified subjects', 'المباني': 'Buildings', 'المبحث': 'Subject', 'المبنى': 'Building',
-  'المجموعات (افصل بفاصلة)': 'Groups (comma separated)', 'المدة': 'Duration', 'المراحل': 'Stages',
+  'المجموعات (افصل بينها بفاصلة)': 'Groups (comma separated)', 'المدة': 'Duration', 'المراحل': 'Stages',
   'المراحل التي يدرّس فيها': 'Stages taught in', 'المراحل المسموحة (لمحرّر المرحلة)': 'Allowed stages (for stage editors)',
   'المرحلة': 'Stage', 'المستخدمون': 'Users', 'المسودة 1': 'Draft 1', 'المعروض حالياً': 'Currently shown', 'المعلم': 'Teacher',
-  'المعلمون': 'Teachers', 'الموضوع': 'Placed', 'الموضوع في الجدول': 'Placed', 'المُسند': 'Assigned',
-  'النشر رغم ذلك؟': 'Publish anyway?', 'النصاب': 'Target load', 'النصاب الأسبوعي': 'Weekly target load', 'النظام': 'System',
-  'النوع': 'Type', 'اليوم': 'Day', 'بداية الحصة الأولى': 'First period starts', 'بطاقة': 'cards',
-  'بيانات المدرسة': 'School details', 'تأكيد': 'Confirm', 'تابع': 'cont.', 'تاريخ البداية': 'Start date',
+  'المعلمون': 'Teachers', 'المُدرَج': 'Placed', 'المُدرَج في الجدول': 'Placed', 'المُسنَد': 'Assigned',
+  'أتريد النشر على الرغم من ذلك؟': 'Publish anyway?', 'النصاب': 'Target load', 'النصاب الأسبوعي': 'Weekly target load', 'النظام': 'System',
+  'النوع': 'Type', 'اليوم': 'Day', 'موعد بدء الحصة الأولى': 'First period starts', 'بطاقة': 'cards',
+  'بيانات المدرسة': 'School details', 'تأكيد': 'Confirm', 'تتمّة': 'cont.', 'تاريخ البداية': 'Start date',
   'تاريخ النشر': 'Published on', 'تاريخ النهاية': 'End date', 'تحذيرات': 'Warnings', 'تطبيق': 'Apply',
-  'تطبيق قالب على عدة أيام وصفوف دفعة واحدة': 'Apply a template to several days and grades at once', 'تعديل': 'Edit',
+  'تطبيق قالب على عدة أيام وصفوف دفعةً واحدة': 'Apply a template to several days and grades at once', 'تعديل': 'Edit',
   'تعديل الحصص': 'Edit periods', 'تعديل الدرس': 'Edit lesson', 'تقسيم جديد': 'New division', 'تم التطبيق': 'Applied',
   'تم الحذف': 'Deleted', 'تم الحفظ': 'Saved',
-  'تم الحفظ — تغيّرت مدة البطاقة فأُعيد إنشاء البطاقات': 'Saved — the card length changed, so the cards were recreated',
-  'تم النسخ': 'Copied', 'تم النشر، والجدول المنشور سابقاً أصبح مؤرشفاً': 'Published; the previously published timetable is now archived',
+  'تم الحفظ، وأُعيد إنشاء البطاقات لتغيّر مدتها': 'Saved — the card length changed, so the cards were recreated',
+  'تم النسخ': 'Copied', 'تم النشر، وأُرشِف الجدول المنشور سابقاً': 'Published; the previously published timetable is now archived',
   'تم وضع الحصة': 'Card placed', 'توقيت الحصص': 'Bell schedules', 'جارٍ التحميل…': 'Loading…', 'جدول جديد': 'New timetable',
-  'جدولة الحصص': 'School Timetable', 'حذف': 'Delete', 'حذف الدرس وكل بطاقاته من الجدول؟': 'Delete the lesson and all its cards?',
-  'حذف هذا السجل؟': 'Delete this record?', 'حساب المستخدم المرتبط': 'Linked user account', 'حسب الشعبة': 'By section',
+  'جدولة الحصص': 'School Timetable', 'حذف': 'Delete', 'أتريد حذف الدرس وجميع بطاقاته من الجدول؟': 'Delete the lesson and all its cards?',
+  'أتريد حذف هذا السجل؟': 'Delete this record?', 'حساب المستخدم المرتبط': 'Linked user account', 'حسب الشعبة': 'By section',
   'حسب القاعة': 'By room', 'حسب المعلم': 'By teacher', 'حصة': 'Period', 'حصة مزدوجة': 'Double period', 'حصة مفردة': 'Single period',
-  'حصص القالب': 'Template periods', 'حصص متتالية': 'consecutive periods', 'حصص موضوعة': 'Periods placed', 'حصص/أسبوع': 'Periods/week',
-  'حفظ': 'Save', 'حفظ الحصص': 'Save periods', 'خروج': 'Log out', 'درس جديد': 'New lesson', 'دوام عادي': 'Normal day', 'ذكر': 'Male',
+  'حصص القالب': 'Template periods', 'حصص متتالية': 'consecutive periods', 'الحصص المُدرَجة': 'Periods placed', 'الحصص أسبوعياً': 'Periods/week',
+  'حفظ': 'Save', 'حفظ الحصص': 'Save periods', 'تسجيل الخروج': 'Log out', 'درس جديد': 'New lesson', 'دوام عادي': 'Normal day', 'ذكر': 'Male',
   'رابط الشعار': 'Logo URL', 'شبكة الجدول': 'Timetable grid', 'شعبة': 'Section',
-  'صالح حتى (للحساب البديل المؤقت)': 'Valid until (temporary substitute account)', 'عام': 'General', 'عدد الحصص': 'Periods',
+  'صالح حتى تاريخ (للحساب البديل المؤقت)': 'Valid until (temporary substitute account)', 'عامّ لجميع المراحل': 'General', 'عدد الحصص': 'Periods',
   'عدد الحصص أسبوعياً': 'Periods per week', 'عدد الطلبة': 'Students', 'عرض في الجدول': 'Show in grid', 'غير متاح': 'Unavailable',
-  'غير موضوعة': 'Unplaced', 'فتح': 'Open', 'فسحة': 'Break', 'فسحة بعد الحصص (مثال: 3,5)': 'Break after periods (e.g. 3,5)',
-  'فعّال': 'Active', 'قاعة': 'Room', 'قالب توقيت جديد': 'New timing template', 'قوالب التوقيت': 'Timing templates',
-  'كامل الشعبة': 'whole section', 'كل الحصص موضوعة': 'All cards placed', 'كل صفوف المرحلة': 'All grades of the stage',
+  'غير مُدرَجة': 'Unplaced', 'فتح': 'Open', 'استراحة': 'Break', 'استراحة بعد الحصص (مثال: 3، 5)': 'Break after periods (e.g. 3,5)',
+  'مفعَّل': 'Active', 'قاعة': 'Room', 'قالب توقيت جديد': 'New timing template', 'قوالب التوقيت': 'Timing templates',
+  'كامل الشعبة': 'whole section', 'أُدرِجت الحصص كلها': 'All cards placed', 'جميع صفوف المرحلة': 'All grades of the stage',
   'كلمة المرور': 'Password', 'لا توجد تقسيمات لهذه الشعبة': 'No divisions for this section', 'لا توجد دروس مطابقة': 'No matching lessons',
   'لا توجد سجلات بعد': 'No records yet', 'لا توجد عناصر': 'No items', 'لا توجد قوالب بعد': 'No templates yet',
   'لا توجد مجموعات': 'No groups', 'لا شيء': 'None',
-  'لا يوجد اتصال ولا توجد نسخة محفوظة لهذه البيانات': 'Offline and no saved copy of this data',
-  'لا يوجد اتصال — وضع العرض فقط، ولا يمكن الحفظ الآن': 'Offline — view only, saving is not possible right now',
+  'لا يوجد اتصال، ولا نسخة محفوظة من هذه البيانات': 'Offline and no saved copy of this data',
+  'لا يوجد اتصال بالإنترنت — وضع العرض فقط، ولا يمكن الحفظ الآن': 'Offline — view only, saving is not possible right now',
   'لا يوجد جدول بعد': 'No timetable yet',
-  'لا يوجد جدول بعد. أنشئ سنة دراسية وفصلاً ثم جدولاً جديداً.': 'No timetable yet. Create an academic year and a term, then a new timetable.',
-  'لا يوجد جدول محدد. أنشئ جدولاً من صفحة "الجداول".': 'No timetable selected. Create one on the "Timetables" page.',
-  'للأولاد/البنات أو الموسيقى/الدراما استخدم مجموعتين من نفس التقسيم بدل رفع هذا الرقم':
+  'لا يوجد جدول بعد. أنشئ سنةً دراسية وفصلاً دراسياً، ثم جدولاً جديداً.': 'No timetable yet. Create an academic year and a term, then a new timetable.',
+  'لم يُحدَّد جدول بعد. أنشئ جدولاً من صفحة "الجداول".': 'No timetable selected. Create one on the "Timetables" page.',
+  'لحصص الأولاد والبنات، أو الموسيقى والدراما، استخدم مجموعتين من التقسيم نفسه بدلاً من رفع هذا الرقم':
     'For boys/girls or music/drama, use two groups of one division instead of raising this number',
   'مؤرشف': 'archived', 'مبحث': 'Subject', 'متاح': 'Available', 'مجموعة': 'Group', 'مجموعة جديدة': 'New group',
-  'محرّر مرحلة': 'Stage editor', 'مدة البطاقة': 'Card length', 'مدة الحصة (دقيقة)': 'Period length (min)',
-  'مدة الفسحة (دقيقة)': 'Break length (min)', 'مدير النظام': 'Administrator', 'مزدوجة': 'Double', 'مسودة': 'draft',
-  'مشاهد': 'Viewer', 'مشتركة (تتسع لأكثر من صف بنفس الوقت)': 'Shared (holds several classes at once)', 'معلم': 'Teacher',
-  'مفردة': 'Single', 'مقفلة — اضغط لإلغاء القفل': 'Locked — click to unlock', 'ملاحظات': 'Notes',
+  'محرّر مرحلة': 'Stage editor', 'مدة البطاقة': 'Card length', 'مدة الحصة (بالدقائق)': 'Period length (min)',
+  'مدة الاستراحة (بالدقائق)': 'Break length (min)', 'مدير النظام': 'Administrator', 'مزدوجة': 'Double', 'مسودة': 'draft',
+  'مشاهد': 'Viewer', 'مشتركة (تتّسع لأكثر من صف في الوقت نفسه)': 'Shared (holds several classes at once)', 'معلم': 'Teacher',
+  'مفردة': 'Single', 'مقفلة — انقر لإلغاء القفل': 'Locked — click to unlock', 'ملاحظات': 'Notes',
   'ملخص نصاب المعلمين': 'Teacher load summary', 'من': 'From', 'منشور': 'published', 'نسبة الإنجاز': 'Completion',
   'نسخ كقالب جديد': 'Copy as new template', 'نسخ كمسودة': 'Copy as draft', 'نسخة': 'copy', 'نشر': 'Publish',
   'نوع القاعة': 'Room type', 'نوع القاعة المطلوب': 'Required room type', 'هذا الجدول مؤرشف وللقراءة فقط': 'This timetable is archived and read-only',
   'يظهر الشعار في رأس الواجهة وفي كل تقرير مطبوع أو مُصدَّر.': 'The logo appears in the header and on every printed or exported report.',
-  'يوم دوام': 'School day', '— بدون —': '— none —', '— حسب المرحلة —': '— stage default —',
+  'يوم دراسي': 'School day', '— بدون —': '— none —', '— وفق المرحلة —': '— stage default —',
   'الموقع': 'Location', 'English': 'العربية',
   grade: 'grades', section: 'sections', lesson: 'lessons', card: 'cards', teacher: 'teachers',
 };
@@ -106,6 +106,20 @@ export function t(ar) {
              student_group: 'مجموعات', term: 'فصول', timetable: 'جداول', bell_assignment: 'توقيت مرتبط' }[ar] || ar;
   }
   return I18N[ar] ?? ar;
+}
+
+// Counted nouns with correct Arabic agreement: 1 → «بطاقة واحدة»، 2 → «بطاقتان»، 3–10 → «3 بطاقات»، 11+ → «11 بطاقة».
+const NOUNS = {
+  card: ['بطاقة', 'بطاقتان', 'بطاقات', true, 'card', 'cards'],
+  record: ['سجل', 'سجلان', 'سجلات', false, 'record', 'records'],
+};
+export function countAr(n, noun) {
+  const [one, two, few, fem, en1, enN] = NOUNS[noun];
+  if (lang === 'en') return `${n} ${n === 1 ? en1 : enN}`;
+  if (n === 1) return `${one} ${fem ? 'واحدة' : 'واحد'}`;
+  if (n === 2) return two;
+  const r = n % 100;
+  return r >= 3 && r <= 10 ? `${n} ${few}` : `${n} ${one}`;
 }
 
 const originals = [];  // [node, attr|null, arabicText]

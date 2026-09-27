@@ -1,6 +1,6 @@
 import * as api from '../api.js';
 import { loadTimetables } from '../app.js';
-import { t } from '../i18n.js';
+import { countAr, t } from '../i18n.js';
 import { byId, invalidate, isAdmin, list, state } from '../store.js';
 import { confirmBox, h, nameOf, openForm, toast, toastError, put, swap } from '../ui.js';
 
@@ -32,7 +32,7 @@ export async function render(root) {
     swap(host, state.timetables.length
       ? h('table', { class: 'data' }, h('thead', {}, h('tr', {}, [t('الاسم'), t('الفصل'), t('الحالة'), t('تاريخ النشر'), ''].map(x => h('th', {}, x)))),
           h('tbody', {}, rows))
-      : h('p', { class: 'muted' }, t('لا يوجد جدول بعد. أنشئ سنة دراسية وفصلاً ثم جدولاً جديداً.')));
+      : h('p', { class: 'muted' }, t('لا يوجد جدول بعد. أنشئ سنةً دراسية وفصلاً دراسياً، ثم جدولاً جديداً.')));
   }
 
   function open(tt) {
@@ -51,7 +51,7 @@ export async function render(root) {
     fields: [{ name: 'name', label: t('اسم المسودة الجديدة'), required: true }],
     onSubmit: async v => {
       const r = await api.post(`/api/timetables/${tt.id}/copy`, { name: v.name });
-      toast(`${t('تم النسخ')}: ${r.cards_copied} ${t('بطاقة')}`, 'ok');
+      toast(`${t('تم النسخ')}: ${countAr(r.cards_copied, 'card')}`, 'ok');
       await refresh();
     } });
   async function publish(tt) {
@@ -60,21 +60,21 @@ export async function render(root) {
     } catch (e) {
       if (e.details && e.details.reason === 'timetable_has_errors') {
         const n = e.details.summary.errors;
-        if (!(await confirmBox(`${t('الجدول يحتوي أخطاء')}: ${n}. ${t('النشر رغم ذلك؟')}`))) return;
+        if (!(await confirmBox(`${t('في الجدول أخطاء')}: ${n}. ${t('أتريد النشر على الرغم من ذلك؟')}`))) return;
         try { await api.post(`/api/timetables/${tt.id}/publish`, { version: tt.version, force: true }); }
         catch (e2) { toastError(e2); return; }
       } else { toastError(e); return; }
     }
-    toast(t('تم النشر، والجدول المنشور سابقاً أصبح مؤرشفاً'), 'ok');
+    toast(t('تم النشر، وأُرشِف الجدول المنشور سابقاً'), 'ok');
     await refresh();
   }
   async function remove(tt) {
-    if (!(await confirmBox(t('حذف هذا السجل؟')))) return;
+    if (!(await confirmBox(t('أتريد حذف هذا السجل؟')))) return;
     try { await api.del(`/api/timetables/${tt.id}`, tt.version); await refresh(); } catch (e) { toastError(e); }
   }
 
   put(root, h('h1', { class: 'title' }, t('الجداول')),
-    h('p', { class: 'muted' }, t('اعمل على مسودة، ثم انشرها. النشر يؤرشف الجدول المنشور سابقاً لنفس الفصل، والمؤرشف للقراءة فقط.')),
+    h('p', { class: 'muted' }, t('اعمل على مسودة ثم انشرها. ويؤدي النشر إلى أرشفة الجدول المنشور سابقاً للفصل نفسه، والجدول المؤرشف للقراءة فقط.')),
     isAdmin() ? h('div', { class: 'toolbar' }, h('button', { class: 'btn', onclick: create }, `+ ${t('جدول جديد')}`)) : null,
     host);
   draw();

@@ -41,7 +41,7 @@ def login():
     user = db.session.scalars(select(AppUser).where(AppUser.email == email)).first()
     if user is None or not user.check_password(password) or not user.is_usable:
         if request.is_json:
-            return jsonify(error="bad_credentials", message="البريد أو كلمة المرور غير صحيحة، أو الحساب غير فعّال",
+            return jsonify(error="bad_credentials", message="البريد الإلكتروني أو كلمة المرور غير صحيحة، أو أن الحساب غير مفعّل",
                            message_en="Wrong email or password, or the account is inactive"), 401
         return render_template("login.html", error=True, email=email), 401
     user.last_login_at = utcnow()

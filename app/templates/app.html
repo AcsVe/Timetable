@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ asset_version }}">
 </head>
 <body>
-  <div id="offline-banner" class="banner" hidden>لا يوجد اتصال — وضع العرض فقط، ولا يمكن الحفظ الآن</div>
+  <div id="offline-banner" class="banner" hidden>لا يوجد اتصال بالإنترنت — وضع العرض فقط، ولا يمكن الحفظ الآن</div>
   <header class="topbar">
     <button class="icon-btn" id="nav-toggle" aria-label="القائمة">☰</button>
     <img id="school-logo" alt="" hidden>
@@ -25,14 +25,14 @@
     <div class="spacer"></div>
     <button class="btn ghost" id="lang-toggle">English</button>
     <span id="user-name" class="muted"></span>
-    <form method="post" action="/auth/logout"><button class="btn ghost" type="submit">خروج</button></form>
+    <form method="post" action="/auth/logout"><button class="btn ghost" type="submit">تسجيل الخروج</button></form>
   </header>
   <div class="layout">
     <nav id="sidebar" class="sidebar">
       <a href="#/grid" data-route="grid">شبكة الجدول</a>
       <a href="#/lessons" data-route="lessons">الدروس والتوزيع</a>
       <a href="#/validate" data-route="validate">التحقق</a>
-      <a href="#/timetables" data-route="timetables">الجداول (مسودة/منشور)</a>
+      <a href="#/timetables" data-route="timetables">الجداول (المسودّات والمنشورة)</a>
       <div class="nav-title">الإعداد</div>
       <a href="#/setup/stages" data-route="setup/stages">المراحل</a>
       <a href="#/setup/grades" data-route="setup/grades">الصفوف</a>

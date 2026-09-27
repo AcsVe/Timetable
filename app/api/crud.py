@@ -171,7 +171,7 @@ def _user_write(obj: AppUser, data: dict, creating: bool):
         raise ApiError("validation", 400, details={"field": "stage_ids", "reason": "stage_editor needs at least one stage"})
     if not creating and obj.id == current_user.id and (not obj.is_active or obj.role != "admin"):
         raise ApiError("validation", 400, details={"reason": "cannot_lock_yourself_out",
-                                                     "message": "لا يمكنك إلغاء صلاحية المدير أو تعطيل حسابك بنفسك"})
+                                                     "message": "لا يمكنك سحب صلاحية المدير من حسابك أو تعطيله بنفسك"})
 
 
 def _user_read(obj: AppUser) -> dict:
