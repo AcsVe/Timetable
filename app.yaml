@@ -1,0 +1,23 @@
+# Google App Engine (standard) — free quota: 28 F1 instance-hours/day, 1 GiB outgoing traffic/day.
+# Secrets are NOT stored here: create secrets.yaml next to this file (it is git-ignored) — see README.
+runtime: python312
+instance_class: F1
+
+includes:
+  - secrets.yaml
+
+entrypoint: sh -c "flask --app wsgi.py db upgrade && flask --app wsgi.py seed-base && exec gunicorn wsgi:app --bind :$PORT --workers 1 --threads 4 --timeout 120"
+
+automatic_scaling:
+  min_instances: 0          # sleeps when unused → stays inside the free hours
+  max_instances: 1          # never more than one instance → never above 24 of the 28 free hours/day
+  target_cpu_utilization: 0.9
+
+env_variables:
+  APP_TIMEZONE: Asia/Amman
+  SESSION_COOKIE_SECURE: "1"
+
+handlers:
+  - url: /.*
+    script: auto
+    secure: always

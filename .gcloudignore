@@ -1,0 +1,13 @@
+.git
+.gitignore
+.gcloudignore
+tests/
+docs/
+__pycache__/
+*.pyc
+.pytest_cache/
+Dockerfile
+.dockerignore
+render.yaml
+Procfile
+secrets.yaml.example

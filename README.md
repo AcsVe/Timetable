@@ -89,6 +89,18 @@ pytest -q
 الخادم المجاني في Koyeb: ‏512MB، ‏0.1 vCPU، ويتوقف بعد ساعة بلا زيارات ثم يعود مع أول طلب.
 على خادم أكبر يمكن رفع `WEB_CONCURRENCY` (عدد العمليات).
 
+## النشر على Google App Engine + Neon
+
+الحصة المجانية: 28 ساعة تشغيل F1 يومياً و1GB نقل صادر يومياً (≈30GB شهرياً)؛ يتطلب حساب فوترة (بطاقة) ولا تُحتسب رسوم ضمن الحصة.
+من **Cloud Shell** في المتصفح:
+```
+git clone https://github.com/AcsVe/Timetable && cd Timetable
+cp secrets.yaml.example secrets.yaml && nano secrets.yaml      # أدخل القيم
+gcloud app create --region=europe-west3                         # مرة واحدة فقط (فرانكفورت)
+gcloud app deploy
+```
+للتحديث لاحقاً: `git pull && gcloud app deploy`.
+
 ## النشر على Render + Neon (بديل)
 
 `render.yaml` جاهز: New ← Blueprint ← المستودع، ثم أدخل `DATABASE_URL` و`INITIAL_ADMIN_EMAIL` و`INITIAL_ADMIN_PASSWORD`.
