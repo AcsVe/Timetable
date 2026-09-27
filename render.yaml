@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: timetable
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    # Migrations + base data run at start (idempotent). Works on the free plan, which has no pre-deploy step.
+    startCommand: flask --app wsgi.py db upgrade && flask --app wsgi.py seed-base && gunicorn wsgi:app --workers 2 --threads 4 --timeout 60
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATABASE_URL
+        sync: false   # Neon connection string
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SESSION_COOKIE_SECURE
+        value: "1"

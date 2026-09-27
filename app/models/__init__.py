@@ -1,0 +1,41 @@
+from app.models.base import SyncMixin, new_id  # noqa: F401
+from app.models.core import (  # noqa: F401
+    AcademicYear,
+    AppSetting,
+    BellAssignment,
+    BellSchedule,
+    BellSlot,
+    Building,
+    Division,
+    Grade,
+    Room,
+    School,
+    Section,
+    Stage,
+    StudentGroup,
+    Subject,
+    Teacher,
+    Term,
+    Weekday,
+    subject_room,
+    teacher_stage,
+    teacher_subject,
+)
+from app.models.timetable import (  # noqa: F401
+    Availability,
+    Card,
+    ConstraintRule,
+    Lesson,
+    LessonTarget,
+    LessonTeacher,
+    Occupancy,
+    Timetable,
+)
+from app.models.users import (  # noqa: F401
+    AppUser,
+    AuditLog,
+    IdempotencyKey,
+    Notification,
+    PushSubscription,
+    user_stage,
+)

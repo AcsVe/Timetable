@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}تسجيل الدخول — جدولة الحصص{% endblock %}
+{% block body %}
+<div class="wrap">
+  <form class="card" method="post">
+    <h1>تسجيل الدخول</h1>
+    <label for="email">البريد الإلكتروني</label>
+    <input id="email" name="email" type="email" value="{{ email or '' }}" autocomplete="username" required>
+    <label for="password">كلمة المرور</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">دخول</button>
+    {% if error %}<p class="err">البريد أو كلمة المرور غير صحيحة، أو الحساب غير فعّال.</p>{% endif %}
+  </form>
+</div>
+{% endblock %}

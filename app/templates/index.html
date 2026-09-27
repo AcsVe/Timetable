@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="wrap">
+  <div class="card">
+    <h1>مرحباً {{ current_user.display_name }}</h1>
+    <p>الخادم وواجهات API تعمل. الواجهة الإدارية (السحب والإفلات، التقارير، PWA) هي المرحلة التالية.</p>
+    <form method="post" action="{{ url_for('auth.logout') }}"><button type="submit">تسجيل الخروج</button></form>
+  </div>
+</div>
+{% endblock %}
