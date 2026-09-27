@@ -74,15 +74,24 @@ pytest -q
 تُبنى قاعدة الاختبار من ملفات الـ migrations نفسها، فالاختبارات تثبت صحة الـ migrations أيضاً.
 اختبارات المتصفح (`tests/e2e`) تشغّل الواجهة فعلياً في Chromium عبر Playwright: السحب والإفلات، التعارضات، اللغتين، ووضع عدم الاتصال.
 
-## النشر على Render + Neon
+## النشر على Koyeb + Neon (الموصى به)
 
-1. **Neon:** أنشئ مشروعاً (Postgres 15 أو أحدث)، وانسخ رابط الاتصال `postgresql://…?sslmode=require`.
-2. **Render:** New ← Blueprint ← اختر المستودع `AcsVe/Timetable` (يقرأ `render.yaml`).
-3. عند الطلب أدخل: `DATABASE_URL` (رابط Neon)، `INITIAL_ADMIN_EMAIL`، `INITIAL_ADMIN_PASSWORD` (8 أحرف على الأقل). اختيارياً `SEED_DEMO=1` لمدرسة تجريبية.
-4. عند كل تشغيل تُنفَّذ الـ migrations تلقائياً، ويُنشأ حساب المدير الأول مرة واحدة فقط إن لم يوجد مدير.
-5. بعد أول دخول: احذف `INITIAL_ADMIN_PASSWORD` من Render (وأعد `SEED_DEMO` إلى 0).
+1. **Neon:** مشروع في Frankfurt (eu-central-1)، وانسخ رابط الاتصال `postgresql://…?sslmode=require`.
+2. **Koyeb:** Create Web Service ← GitHub ← `AcsVe/Timetable`، فرع `main`.
+   - Builder: **Dockerfile** (الملف موجود في جذر المستودع).
+   - Instance: **Free**، Region: **Frankfurt**.
+   - Port: **8000** (HTTP)، Health check: HTTP على المسار `/healthz`.
+3. Environment variables (والحساسة منها كـ Secret):
+   `DATABASE_URL`، `SECRET_KEY` (نص عشوائي طويل)، `INITIAL_ADMIN_EMAIL`، `INITIAL_ADMIN_PASSWORD`، واختيارياً `SEED_DEMO=1`.
+4. Deploy. عند كل تشغيل تُنفَّذ الـ migrations، ويُنشأ المدير الأول مرة واحدة فقط.
+5. بعد أول دخول: احذف `INITIAL_ADMIN_PASSWORD`، وأعد `SEED_DEMO` إلى `0`.
 
-لا حاجة إلى Render Shell (غير متاح في الخطة المجانية).
+الخادم المجاني في Koyeb: ‏512MB، ‏0.1 vCPU، ويتوقف بعد ساعة بلا زيارات ثم يعود مع أول طلب.
+على خادم أكبر يمكن رفع `WEB_CONCURRENCY` (عدد العمليات).
+
+## النشر على Render + Neon (بديل)
+
+`render.yaml` جاهز: New ← Blueprint ← المستودع، ثم أدخل `DATABASE_URL` و`INITIAL_ADMIN_EMAIL` و`INITIAL_ADMIN_PASSWORD`.
 
 ## ملخص الـ API
 
