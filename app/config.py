@@ -16,7 +16,8 @@ class Config:
     SQLALCHEMY_DATABASE_URI = _db_url(
         os.environ.get("DATABASE_URL", "postgresql+psycopg://postgres@/timetable?host=/tmp")
     )
-    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True, "pool_recycle": 280}
+    # prepare_threshold=None: safe behind Neon's pooled (PgBouncer) endpoint as well as the direct one.
+    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True, "pool_recycle": 280, "connect_args": {"prepare_threshold": None}}
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"

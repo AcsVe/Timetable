@@ -15,3 +15,11 @@ services:
         generateValue: true
       - key: SESSION_COOKIE_SECURE
         value: "1"
+      - key: INITIAL_ADMIN_EMAIL
+        sync: false   # first admin (created once, only if no admin exists)
+      - key: INITIAL_ADMIN_PASSWORD
+        sync: false   # remove after the first login
+      - key: APP_TIMEZONE
+        value: Asia/Amman
+      - key: SEED_DEMO
+        value: "0"    # "1" = create a demo school once, only into an empty database

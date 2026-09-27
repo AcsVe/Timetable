@@ -165,3 +165,28 @@ def test_settings_public_vs_admin(api):
     api.login("v@x.test")
     assert api.ok("get", "/api/settings") == {"offline_edit_enabled": False}
     assert api.put("/api/settings/offline_edit_enabled", {"value": True}).status_code == 403
+
+
+def test_initial_admin_bootstrap_only_once(app, monkeypatch, ctx):
+    from app.models import AppUser
+    monkeypatch.setenv("INITIAL_ADMIN_EMAIL", "boss@school.test")
+    monkeypatch.setenv("INITIAL_ADMIN_PASSWORD", "longenough1")
+    runner = app.test_cli_runner()
+    assert runner.invoke(args=["seed-base"]).exit_code == 0
+    assert runner.invoke(args=["seed-base"]).exit_code == 0     # idempotent
+    monkeypatch.setenv("INITIAL_ADMIN_EMAIL", "other@school.test")
+    assert runner.invoke(args=["seed-base"]).exit_code == 0     # an admin exists → nothing new
+    assert [u.email for u in ctx.query(AppUser).all()] == ["boss@school.test"]
+
+
+def test_seed_demo_once_into_empty_db(app, monkeypatch, ctx):
+    from app.models import Stage
+    monkeypatch.setenv("INITIAL_ADMIN_EMAIL", "boss@school.test")
+    monkeypatch.setenv("INITIAL_ADMIN_PASSWORD", "longenough1")
+    monkeypatch.setenv("SEED_DEMO", "1")
+    runner = app.test_cli_runner()
+    assert runner.invoke(args=["seed-base"]).exit_code == 0
+    n = ctx.query(Stage).count()
+    assert n == 2
+    assert runner.invoke(args=["seed-base"]).exit_code == 0
+    assert ctx.query(Stage).count() == n

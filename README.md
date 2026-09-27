@@ -76,8 +76,13 @@ pytest -q
 
 ## النشر على Render + Neon
 
-`render.yaml` جاهز: اضبط `DATABASE_URL` (رابط Neon) فقط؛ `SECRET_KEY` يُولَّد تلقائياً. الـ migrations تعمل تلقائياً عند كل تشغيل.
-أنشئ أول حساب مدير من Render Shell: `flask --app wsgi.py create-admin --email ... --password ...`
+1. **Neon:** أنشئ مشروعاً (Postgres 15 أو أحدث)، وانسخ رابط الاتصال `postgresql://…?sslmode=require`.
+2. **Render:** New ← Blueprint ← اختر المستودع `AcsVe/Timetable` (يقرأ `render.yaml`).
+3. عند الطلب أدخل: `DATABASE_URL` (رابط Neon)، `INITIAL_ADMIN_EMAIL`، `INITIAL_ADMIN_PASSWORD` (8 أحرف على الأقل). اختيارياً `SEED_DEMO=1` لمدرسة تجريبية.
+4. عند كل تشغيل تُنفَّذ الـ migrations تلقائياً، ويُنشأ حساب المدير الأول مرة واحدة فقط إن لم يوجد مدير.
+5. بعد أول دخول: احذف `INITIAL_ADMIN_PASSWORD` من Render (وأعد `SEED_DEMO` إلى 0).
+
+لا حاجة إلى Render Shell (غير متاح في الخطة المجانية).
 
 ## ملخص الـ API
 

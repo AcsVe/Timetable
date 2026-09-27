@@ -40,7 +40,29 @@ def register_cli(app):
                 db.session.add(Weekday(iso_dow=dow, name_ar=ar, name_en=en, sort_order=order, is_school_day=school))
         if db.session.get(AppSetting, "offline_edit_enabled") is None:
             db.session.add(AppSetting(key="offline_edit_enabled", value=False))
+        # First deployment without a shell (e.g. Render free plan): create the first admin from
+        # INITIAL_ADMIN_EMAIL / INITIAL_ADMIN_PASSWORD, only while no admin exists at all.
+        import os
+
+        from app.models import AppUser
+        email, password = os.environ.get("INITIAL_ADMIN_EMAIL"), os.environ.get("INITIAL_ADMIN_PASSWORD")
+        has_admin = db.session.scalars(select(AppUser).where(AppUser.role == "admin")).first() is not None
+        if email and password and not has_admin:
+            if len(password) < 8:
+                raise click.ClickException("INITIAL_ADMIN_PASSWORD must be at least 8 characters")
+            admin = AppUser(email=email, display_name="مدير النظام", role="admin")
+            admin.set_password(password)
+            db.session.add(admin)
+            click.echo(f"initial admin created: {email}")
         db.session.commit()
+        # Optional demo school for a first look (SEED_DEMO=1), only into an empty database.
+        from app.models import Stage
+        if os.environ.get("SEED_DEMO") == "1" and db.session.scalars(select(Stage)).first() is None:
+            admin = db.session.scalars(select(AppUser).where(AppUser.role == "admin")).first()
+            if admin:
+                from app.demo import seed_demo
+                seed_demo(app, admin.id)
+                click.echo("demo school created")
         click.echo("base data ready")
 
     @app.cli.command("seed-demo")
