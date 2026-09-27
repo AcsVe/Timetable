@@ -2,6 +2,8 @@ services:
   - type: web
     name: timetable
     runtime: python
+    region: frankfurt   # closest Render region to Jordan; create the Neon project in Frankfurt (eu-central-1) too
+    plan: free
     buildCommand: pip install -r requirements.txt
     # Migrations + base data run at start (idempotent). Works on the free plan, which has no pre-deploy step.
     startCommand: flask --app wsgi.py db upgrade && flask --app wsgi.py seed-base && gunicorn wsgi:app --workers 2 --threads 4 --timeout 60
