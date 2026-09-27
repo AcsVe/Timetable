@@ -190,3 +190,11 @@ def test_seed_demo_once_into_empty_db(app, monkeypatch, ctx):
     assert n == 2
     assert runner.invoke(args=["seed-base"]).exit_code == 0
     assert ctx.query(Stage).count() == n
+
+
+def test_responses_are_compressed(school):
+    a = school["api"]
+    r = a.get("/api/sync?since=0", headers={"Accept-Encoding": "gzip"})  # large enough to compress
+    assert r.headers.get("Content-Encoding") == "gzip"
+    r = a.get("/static/js/i18n.js", headers={"Accept-Encoding": "gzip"})
+    assert r.headers.get("Content-Encoding") == "gzip"

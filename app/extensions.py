@@ -1,3 +1,4 @@
+from flask_compress import Compress
 from flask_login import LoginManager
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
@@ -15,3 +16,4 @@ naming = {
 db = SQLAlchemy(metadata=MetaData(naming_convention=naming))
 migrate = Migrate()
 login_manager = LoginManager()
+compress = Compress()

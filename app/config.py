@@ -25,6 +25,12 @@ class Config:
     JSON_AS_ASCII = False
     IDEMPOTENCY_TTL_DAYS = int(os.environ.get("IDEMPOTENCY_TTL_DAYS", "7"))
     SYNC_PAGE_SIZE = 500
+    # Compression (Flask-Compress). Excel/PDF/PNG are already compressed, so only text types.
+    COMPRESS_MIMETYPES = ["text/html", "text/css", "application/javascript", "text/javascript",
+                          "application/json", "application/manifest+json"]
+    COMPRESS_MIN_SIZE = 600
+    # Static files: let browsers revalidate cheaply; the service worker keeps its own copy.
+    SEND_FILE_MAX_AGE_DEFAULT = 3600
 
 
 class TestConfig(Config):

@@ -13,3 +13,4 @@ reportlab==4.4.10
 arabic-reshaper==3.0.1
 python-bidi==0.6.11
 Pillow==12.2.0
+Flask-Compress==1.25
