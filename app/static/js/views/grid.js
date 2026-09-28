@@ -267,7 +267,7 @@ export async function render(root) {
 
   put(root, h('h1', { class: 'title' }, `${t('شبكة الجدول')} — ${ctx.tt.name}`),
     ctx.readOnly ? h('p', { class: 'reasons' }, t('هذا الجدول مؤرشف وللقراءة فقط')) : null,
-    h('div', { class: 'toolbar' }, modeSel, entitySel, stageSel, orientSel,
+    h('div', { class: 'toolbar sticky' }, modeSel, entitySel, stageSel, orientSel,
       h('a', { class: 'btn ghost', href: '#/lessons' }, t('الدروس والتوزيع')),
       h('a', { class: 'btn ghost', href: '#/validate' }, t('التحقق'))),
     info, gridHost);

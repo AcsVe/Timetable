@@ -233,7 +233,7 @@ export async function render(root, [res]) {
     } catch (e) { toastError(e); }
   }
 
-  const toolbar = h('div', { class: 'toolbar' },
+  const toolbar = h('div', { class: 'toolbar sticky' },
     canEdit() ? h('button', { class: 'btn', onclick: add }, `+ ${t('إضافة')}`) : null,
     filterField ? h('label', { class: 'inline' }, `${filterField.label}:`,
       h('select', { onchange: e => { filterValue = e.target.value; sessionStorage.setItem(`filter:${res}`, filterValue); draw(); } },
@@ -292,7 +292,7 @@ async function renderDivisions(root) {
   }
 
   put(root, h('h1', { class: 'title' }, t('التقسيمات والمجموعات')), help,
-    h('div', { class: 'toolbar' },
+    h('div', { class: 'toolbar sticky' },
       h('label', { class: 'inline' }, `${t('الشعبة')}:`, h('select', {
         onchange: e => { sectionId = e.target.value; sessionStorage.setItem('div:section', sectionId); draw(); } },
         sections.map(o => h('option', { value: o.value, selected: o.value === sectionId }, o.label)))),

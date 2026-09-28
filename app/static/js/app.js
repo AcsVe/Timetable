@@ -1,7 +1,7 @@
 import * as api from './api.js';
 import { captureStaticText, lang, setLang, t, onLangChange } from './i18n.js';
 import { state, isAdmin } from './store.js';
-import { h, toastError } from './ui.js';
+import { h, jumpTo, toastError } from './ui.js';
 
 const ROUTES = {
   grid: () => import('./views/grid.js'),
@@ -18,20 +18,69 @@ const ROUTES = {
 const view = document.getElementById('view');
 let renderToken = 0;
 
+// ---------------------------------------------------------------------------
+// Scroll memory + in-page anchors
+//  - clicking a link (sidebar or in-page)  → the new page opens at its top (never hidden under the top bar)
+//  - browser back/forward, reload, re-render → the page returns to where you were
+//  - "#/bells?to=assign" opens a page and jumps to the element with id="assign"
+// ---------------------------------------------------------------------------
+const SCROLL_KEY = 'scroll-pos';
+let positions = {};
+try { positions = JSON.parse(sessionStorage.getItem(SCROLL_KEY) || '{}'); } catch (_) { positions = {}; }
+let currentPath = null;
+let freshNavigation = false;
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
+function parseHash() {
+  const raw = location.hash.replace(/^#\/?/, '') || 'grid';
+  const [path, query = ''] = raw.split('?');
+  return { path, params: new URLSearchParams(query) };
+}
+function savePosition() {
+  if (!currentPath) return;
+  positions[currentPath] = window.scrollY;
+  try { sessionStorage.setItem(SCROLL_KEY, JSON.stringify(positions)); } catch (_) { /* ignore */ }
+}
+window.addEventListener('scroll', () => { if (currentPath) positions[currentPath] = window.scrollY; }, { passive: true });
+window.addEventListener('beforeunload', savePosition);
+document.addEventListener('click', e => {
+  const a = e.target.closest('a[href^="#/"]');
+  if (a && !e.ctrlKey && !e.metaKey && !e.shiftKey) freshNavigation = true;
+});
+
+/** Scroll an element to just below the sticky top bar and flash it. */
+export { jumpTo };
+
 async function route() {
-  const hash = location.hash.replace(/^#\/?/, '') || 'grid';
-  const [name, ...rest] = hash.split('/');
-  document.querySelectorAll('#sidebar a').forEach(a => a.classList.toggle('active', a.dataset.route === hash));
+  const { path, params } = parseHash();
+  const samePage = path === currentPath;
+  savePosition();
+  const fresh = freshNavigation && !samePage;
+  freshNavigation = false;
+  const keepY = samePage ? window.scrollY : null;
+  currentPath = path;
+
+  const [name, ...rest] = path.split('/');
+  document.querySelectorAll('#sidebar a').forEach(a => a.classList.toggle('active', a.dataset.route === path));
   document.getElementById('sidebar').classList.remove('open');
   const loader = ROUTES[name];
   const token = ++renderToken;
   if (!loader) { view.replaceChildren(h('p', {}, t('الصفحة غير موجودة'))); return; }
-  view.replaceChildren(h('p', { class: 'muted' }, t('جارٍ التحميل…')));
+  if (!samePage) view.replaceChildren(h('p', { class: 'muted' }, t('جارٍ التحميل…')));
   try {
     const mod = await loader();
     const root = h('div');
-    await mod.render(root, rest);
-    if (token === renderToken) view.replaceChildren(root);
+    await mod.render(root, rest, params);
+    if (token !== renderToken) return;
+    view.replaceChildren(root);
+    // Wait one frame so the new page has its full height before scrolling.
+    requestAnimationFrame(() => {
+      const target = params.get('to');
+      if (target && jumpTo(target, { smooth: false })) return;
+      if (keepY !== null) window.scrollTo(0, keepY);
+      else if (fresh) window.scrollTo(0, 0);
+      else window.scrollTo(0, positions[path] || 0);
+    });
   } catch (e) {
     if (token === renderToken) view.replaceChildren(h('p', { class: 'form-error' }, e.message || String(e)));
     console.error(e);
@@ -57,7 +106,16 @@ export async function loadTimetables() {
     : [h('option', { value: '' }, t('لا يوجد جدول بعد'))]));
 }
 
+function trackTopbarHeight() {
+  const bar = document.querySelector('.topbar');
+  const set = () => document.documentElement.style.setProperty('--topbar-h', `${bar.offsetHeight}px`);
+  set();
+  if ('ResizeObserver' in window) new ResizeObserver(set).observe(bar);
+  else window.addEventListener('resize', set);
+}
+
 async function boot() {
+  trackTopbarHeight();
   captureStaticText();
   setLang(lang);
   document.getElementById('lang-toggle').onclick = () => setLang(lang === 'ar' ? 'en' : 'ar');

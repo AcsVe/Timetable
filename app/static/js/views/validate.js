@@ -1,6 +1,6 @@
 import * as api from '../api.js';
 import { lang, t } from '../i18n.js';
-import { h, put } from '../ui.js';
+import { h, pageNav, put } from '../ui.js';
 import { loadContext, noTimetable } from './ctx.js';
 
 export async function render(root) {
@@ -34,7 +34,9 @@ export async function render(root) {
       h('div', { class: 'stat' }, h('b', {}, s.warnings), t('تحذيرات')),
       h('div', { class: 'stat' }, h('b', {}, `${s.periods_placed} / ${s.periods_total}`), t('الحصص المُدرَجة')),
       h('div', { class: 'stat' }, h('b', {}, s.placed_ratio == null ? '—' : `${Math.round(s.placed_ratio * 100)}%`), t('نسبة الإنجاز'))),
-    h('h2', {}, t('أخطاء')), issues(rep.errors, 'err'),
-    h('h2', {}, t('تحذيرات')), issues(rep.warnings, 'warn'),
+    pageNav([{ id: 'errors', label: `${t('أخطاء')} (${rep.errors.length})` },
+             { id: 'warnings', label: `${t('تحذيرات')} (${rep.warnings.length})` }]),
+    h('h2', { id: 'errors' }, t('أخطاء')), issues(rep.errors, 'err'),
+    h('h2', { id: 'warnings' }, t('تحذيرات')), issues(rep.warnings, 'warn'),
     h('button', { class: 'btn ghost', onclick: () => import('../app.js').then(m => m.rerender()) }, t('إعادة الفحص')));
 }

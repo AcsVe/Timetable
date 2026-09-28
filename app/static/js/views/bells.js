@@ -2,7 +2,7 @@
 import * as api from '../api.js';
 import { countAr, t } from '../i18n.js';
 import { byId, canEdit, currentTimetable, invalidate, list } from '../store.js';
-import { confirmBox, h, nameOf, openForm, toast, toastError, put, swap } from '../ui.js';
+import { confirmBox, h, jumpTo, nameOf, openForm, pageNav, put, swap, toast, toastError } from '../ui.js';
 
 const toMin = s => { const [a, b] = String(s).slice(0, 5).split(':').map(Number); return a * 60 + b; };
 const toTime = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
@@ -34,7 +34,7 @@ export async function render(root) {
             h('td', {}, lessons.length), h('td', {}, s.slots[0]?.starts_at.slice(0, 5) || ''),
             h('td', {}, s.slots.at(-1)?.ends_at.slice(0, 5) || ''),
             h('td', { style: { whiteSpace: 'nowrap' } },
-              h('button', { class: 'btn small ghost', onclick: () => { selectedSchedule = s; drawEditor(); } }, t('تعديل الحصص')), ' ',
+              h('button', { class: 'btn small ghost', onclick: () => { selectedSchedule = s; drawEditor(); jumpTo('slots'); } }, t('تعديل الحصص')), ' ',
               canEdit() ? h('button', { class: 'btn small ghost', onclick: () => cloneSchedule(s) }, t('نسخ كقالب جديد')) : null, ' ',
               canEdit() ? h('button', { class: 'btn small ghost', onclick: () => removeSchedule(s) }, t('حذف')) : null));
         })))
@@ -121,7 +121,7 @@ export async function render(root) {
       } catch (e) { toastError(e); }
     }
     drawRows();
-    swap(editorHost, h('div', { class: 'stat', style: { marginTop: '14px' } },
+    swap(editorHost, h('div', { class: 'stat', id: 'slots', style: { marginTop: '14px' } },
       h('h3', {}, `${t('حصص القالب')}: ${nameOf(s)}`),
       h('table', { class: 'data' }, h('thead', {}, h('tr', {},
         ['', t('النوع'), t('التسمية'), t('من'), t('إلى'), ''].map(x => h('th', {}, x)))), body),
@@ -173,7 +173,7 @@ export async function render(root) {
     swap(assignHost, 
       h('table', { class: 'data bell-grid' }, h('thead', {}, h('tr', {}, h('th'), days.map(d => h('th', {}, nameOf(d))))),
         h('tbody', {}, rows)),
-      canEdit() && opts.length ? h('div', { class: 'stat', style: { marginTop: '14px' } },
+      canEdit() && opts.length ? h('div', { class: 'stat', id: 'bulk', style: { marginTop: '14px' } },
         h('h3', {}, t('تطبيق قالب على عدة أيام وصفوف دفعةً واحدة')),
         h('div', { class: 'toolbar' }, `${t('القالب')}:`, bulkSched),
         h('div', { class: 'toolbar' }, `${t('الأيام')}:`, dayChecks),
@@ -204,8 +204,10 @@ export async function render(root) {
   put(root, 
     h('h1', { class: 'title' }, t('توقيت الحصص')),
     h('p', { class: 'muted' }, t('أنشئ قوالب التوقيت (مثل: دوام عادي، يوم قصير)، ثم حدِّد القالب لكل يوم ولكل صف. والصف الذي لا يُحدَّد له قالب يأخذ قالب مرحلته. ويُحتسَب تعارض المعلمين على رقم الحصة لا على وقتها.')),
-    h('h2', {}, t('قوالب التوقيت')), schedHost, editorHost,
-    h('h2', { style: { marginTop: '24px' } }, t('التوقيت لكل يوم وصف')),
+    pageNav([{ id: 'templates', label: t('قوالب التوقيت') }, { id: 'assign', label: t('التوقيت لكل يوم وصف') },
+             { id: 'bulk', label: t('تطبيق قالب على عدة أيام وصفوف دفعةً واحدة') }]),
+    h('h2', { id: 'templates' }, t('قوالب التوقيت')), schedHost, editorHost,
+    h('h2', { id: 'assign', style: { marginTop: '24px' } }, t('التوقيت لكل يوم وصف')),
     h('div', { class: 'toolbar' }, `${t('الفصل')}:`, termSel, `${t('المرحلة')}:`, stageSel),
     assignHost);
   await Promise.all([drawSchedules(), drawAssignments()]);

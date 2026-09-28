@@ -2,7 +2,7 @@
 import * as api from '../api.js';
 import { lang, t } from '../i18n.js';
 import { byId, currentTimetable, list } from '../store.js';
-import { h, nameOf, put, swap, toastError } from '../ui.js';
+import { h, nameOf, pageNav, put, swap, toastError } from '../ui.js';
 import { noTimetable } from './ctx.js';
 
 const KINDS = [
@@ -88,7 +88,7 @@ export async function render(root) {
 
   put(root,
     h('h1', { class: 'title no-print' }, `${t('التقارير')} — ${tt.name}`),
-    h('div', { class: 'toolbar no-print' },
+    h('div', { class: 'toolbar sticky no-print' },
       h('label', { class: 'inline' }, `${t('التقرير')}:`, h('select', { id: 'report-kind', onchange: e => { kind = e.target.value; persist(); drawFilters(); load(); } },
         KINDS.map(([v, l]) => h('option', { value: v, selected: v === kind }, t(l)))), layoutLabel)),
     h('div', { class: 'no-print' }, filterHost),
@@ -107,6 +107,8 @@ function renderReport(rep) {
     h('div', { class: 'report-school' }, rep.school_name), h('div', { class: 'report-title' }, rep.title),
     h('div', { class: 'muted' }, [rep.timetable_name, rep.filters, rep.generated_at].filter(Boolean).join(' — ')));
   const blocks = [];
+  const links = [];
+  const blockId = title => { const id = `r-${links.length + 1}`; links.push({ id, label: title }); return id; };
   for (const g of rep.grids) {
     const cells = new Map(g.cells.map(c => [`${c.day}|${c.period}`, c.entries]));
     const missing = new Set(g.missing.map(m => `${m.day}|${m.period}`));
@@ -124,7 +126,7 @@ function renderReport(rep) {
       : h('table', { class: 'data report-grid days-rows' },
           h('thead', {}, h('tr', {}, h('th', {}, t('اليوم')), g.periods.map(p => h('th', {}, pHead(p))))),
           h('tbody', {}, g.days.map((d, di) => h('tr', {}, h('th', { class: 'dayname' }, d), g.periods.map(p => td(di, p.no))))));
-    blocks.push(h('section', { class: 'report-block' }, h('h3', {}, g.title),
+    blocks.push(h('section', { class: 'report-block', id: blockId(g.title) }, h('h3', {}, g.title),
       g.subtitle ? h('div', { class: 'muted' }, g.subtitle) : null,
       h('div', { class: 'grid-scroll' }, table),
       g.footer ? h('p', { class: 'legend' }, g.footer) : null));
@@ -134,10 +136,10 @@ function renderReport(rep) {
     const fmt = (v, j) => (v == null ? '' : tb.percent.includes(j) ? `${Math.round(v * 100)}%` : String(v));
     const rows = tb.rows.map(r => h('tr', {}, r.map((v, j) => h('td', { class: numeric.has(j) ? 'num' : '' }, fmt(v, j)))));
     if (tb.totals) rows.push(h('tr', { class: 'total' }, tb.totals.map((v, j) => h('td', { class: numeric.has(j) ? 'num' : '' }, fmt(v, j)))));
-    blocks.push(h('section', { class: 'report-block' }, h('h3', {}, tb.title),
+    blocks.push(h('section', { class: 'report-block', id: blockId(tb.title) }, h('h3', {}, tb.title),
       h('div', { class: 'grid-scroll' }, h('table', { class: 'data report-table' },
         h('thead', {}, h('tr', {}, tb.columns.map(c => h('th', {}, c)))), h('tbody', {}, rows)))));
   }
   if (!blocks.length) blocks.push(h('p', { class: 'muted' }, t('لا توجد بيانات مطابقة')));
-  return h('div', {}, head, blocks);
+  return h('div', {}, links.length > 1 ? pageNav(links) : null, head, blocks);
 }

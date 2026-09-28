@@ -121,7 +121,7 @@ export async function render(root) {
 
   put(root, h('h1', { class: 'title' }, `${t('الدروس والتوزيع')} — ${ctx.tt.name}`),
     ctx.readOnly ? h('p', { class: 'reasons' }, t('هذا الجدول مؤرشف وللقراءة فقط')) : null,
-    h('div', { class: 'toolbar' },
+    h('div', { class: 'toolbar sticky' },
       canEdit() && !ctx.readOnly ? h('button', { class: 'btn', onclick: add }, `+ ${t('درس جديد')}`) : null,
       sel('stage', t('المرحلة'), ctx.stages.map(s => ({ value: s.id, label: nameOf(s) }))),
       sel('section', t('الشعبة'), ctx.sortedSections().map(s => ({ value: s.id, label: ctx.sectionLabel(s.id) }))),

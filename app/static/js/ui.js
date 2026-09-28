@@ -137,3 +137,36 @@ export function confirmBox(message) {
 }
 
 export const nameOf = o => (o ? (document.documentElement.lang === 'en' && o.name_en ? o.name_en : (o.name_ar ?? o.name ?? '')) : '');
+
+/**
+ * "On this page" bar: buttons that jump to sections of a long page. The URL is updated
+ * (#/page?to=id) so reload / sharing the link opens the same spot.
+ * links: [{ id, label }]
+ */
+// Scroll an element to just below everything pinned at the top (topbar + sticky toolbars/page nav),
+// so the target never lands hidden behind them.
+export function jumpTo(id, { smooth = true } = {}) {
+  const el = typeof id === 'string' ? document.getElementById(id) : id;
+  if (!el) return false;
+  let covered = 0;
+  for (const s of document.querySelectorAll('.topbar, .toolbar.sticky, .page-nav')) {
+    const cs = getComputedStyle(s);
+    if (s.contains(el) || cs.display === 'none' || !['sticky', 'fixed'].includes(cs.position)) continue;
+    covered = Math.max(covered, (parseFloat(cs.top) || 0) + s.offsetHeight);
+  }
+  const y = el.getBoundingClientRect().top + window.scrollY - covered - 10;
+  window.scrollTo({ top: Math.max(0, y), behavior: smooth ? 'smooth' : 'auto' });
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+  return true;
+}
+
+export function pageNav(links) {
+  const go = id => {
+    const base = location.hash.split('?')[0];
+    history.replaceState(null, '', `${base}?to=${encodeURIComponent(id)}`);
+    jumpTo(id);
+  };
+  return h('nav', { class: 'page-nav no-print', 'aria-label': t('على هذه الصفحة') },
+    h('span', { class: 'muted' }, `${t('انتقل إلى')}:`),
+    links.map(l => h('button', { type: 'button', class: 'btn small ghost', onclick: () => go(l.id) }, l.label)));
+}

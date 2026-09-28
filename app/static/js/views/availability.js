@@ -67,6 +67,6 @@ export async function render(root) {
       .map(([v, l]) => h('option', { value: v, selected: v === kind }, t(l))));
   fill();
   put(root, h('h1', { class: 'title' }, `${t('أوقات عدم التوفر')} — ${ctx.tt.name}`),
-    h('div', { class: 'toolbar' }, kindSel, entitySel), host);
+    h('div', { class: 'toolbar sticky' }, kindSel, entitySel), host);
   await draw();
 }

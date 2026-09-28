@@ -212,3 +212,32 @@ def test_teacher_list_shows_period_counts(page):
     page.goto(f"{page.base}/#/setup/teachers")
     row = page.locator("table.data tbody tr", has_text="سارة يوسف")
     expect(row).to_contain_text("26")      # 4 basic sections × 4 + 2 secondary × 5
+
+
+def test_navigation_scroll_and_anchors(page, live_server):
+    """A sidebar link opens the page at its top (nothing hidden under the topbar); back restores the
+    previous position; ?to= anchors land just below the pinned bars."""
+    page.goto(f"{live_server}/#/lessons")
+    page.wait_for_selector(".toolbar.sticky")
+    page.evaluate("window.scrollTo(0, 600)")
+    page.wait_for_timeout(200)
+    y_before = page.evaluate("window.scrollY")
+    page.click(".sidebar a[href='#/bells']")
+    page.wait_for_selector("#templates")
+    page.wait_for_timeout(200)
+    assert page.evaluate("window.scrollY") == 0
+    page.go_back()
+    page.wait_for_selector(".toolbar.sticky")
+    page.wait_for_timeout(300)
+    assert page.evaluate("window.scrollY") == y_before
+    page.goto(f"{live_server}/#/bells?to=assign")
+    page.wait_for_selector("#assign")
+    page.wait_for_timeout(300)
+    top = page.evaluate("document.getElementById('assign').getBoundingClientRect().top")
+    bar = page.evaluate("document.querySelector('.topbar').getBoundingClientRect().bottom")
+    assert top >= bar
+    page.click(".page-nav button >> nth=0")
+    page.wait_for_timeout(800)
+    top = page.evaluate("document.getElementById('templates').getBoundingClientRect().top")
+    nav = page.evaluate("document.querySelector('.page-nav').getBoundingClientRect().bottom")
+    assert top >= min(nav, 2000) - 1 or page.evaluate("window.scrollY") == 0

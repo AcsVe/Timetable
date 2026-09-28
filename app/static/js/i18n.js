@@ -53,6 +53,7 @@ const I18N = {
   'النوع': 'Type', 'اليوم': 'Day', 'موعد بدء الحصة الأولى': 'First period starts', 'بطاقة': 'cards',
   'بيانات المدرسة': 'School details', 'تأكيد': 'Confirm', 'تتمّة': 'cont.', 'تاريخ البداية': 'Start date',
   'تاريخ النشر': 'Published on', 'تاريخ النهاية': 'End date', 'تحذيرات': 'Warnings', 'تطبيق': 'Apply',
+  'على هذه الصفحة': 'On this page', 'انتقل إلى': 'Jump to',
   'تطبيق قالب على عدة أيام وصفوف دفعةً واحدة': 'Apply a template to several days and grades at once', 'تعديل': 'Edit',
   'تعديل الحصص': 'Edit periods', 'تعديل الدرس': 'Edit lesson', 'تقسيم جديد': 'New division', 'تم التطبيق': 'Applied',
   'تم الحذف': 'Deleted', 'تم الحفظ': 'Saved',
