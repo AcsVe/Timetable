@@ -191,8 +191,20 @@ fieldset.plain legend { font-weight: 600; margin-bottom: 4px; }
   .sidebar { display: none; position: fixed; top: var(--topbar-h); bottom: 0; height: auto; inset-inline-start: 0; z-index: 30; overflow-y: auto;
     box-shadow: 0 6px 24px rgba(0,0,0,.2); }
   .sidebar.open { display: block; }
-  .topbar { flex-wrap: wrap; gap: 8px; }
-  .tt-picker select { max-width: 55vw; }
+  /* top bar: row 1 = menu, school, language, sign-out; row 2 = the timetable picker, full width */
+  .topbar { flex-wrap: wrap; gap: 6px 8px; padding: 6px 10px; }
+  .topbar .spacer { display: none; }
+  .topbar .brand { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: .98rem; }
+  .topbar #school-logo { height: 28px; }
+  .topbar .btn { padding: 4px 9px; font-size: .85rem; }
+  .tt-picker { order: 10; flex-basis: 100%; }
+  .tt-picker select { max-width: none; width: 100%; }
+  /* the page never scrolls sideways: wide tables scroll inside their own box */
+  .view table.data { display: block; overflow-x: auto; max-width: 100%; }
+  .view select, .view input { max-width: 100%; }
+  .toolbar { flex-wrap: wrap; }
+  label.inline { flex-wrap: wrap; max-width: 100%; }
+  label.inline select { min-width: 0; flex: 1 1 auto; }
   .tt-grid td.slot { width: 86px; height: 58px; }
   .tt-picker label, #user-name { display: none; }
   .view { padding: 14px 12px; }

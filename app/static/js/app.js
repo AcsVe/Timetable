@@ -121,6 +121,11 @@ async function boot() {
   setLang(lang);
   document.getElementById('lang-toggle').onclick = () => setLang(lang === 'ar' ? 'en' : 'ar');
   document.getElementById('nav-toggle').onclick = () => document.getElementById('sidebar').classList.toggle('open');
+  // Phone menu: a tap outside it closes it.
+  document.addEventListener('click', e => {
+    const sb = document.getElementById('sidebar');
+    if (sb.classList.contains('open') && !sb.contains(e.target) && !e.target.closest('#nav-toggle')) sb.classList.remove('open');
+  });
   api.onOfflineChange(off => { document.getElementById('offline-banner').hidden = !off; });
   onLangChange(async () => { await loadTimetables().catch(() => {}); route(); });
 

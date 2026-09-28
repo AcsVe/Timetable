@@ -269,3 +269,27 @@ def test_import_asc_xml_preview_then_commit(page, tmp_path):
     page.click("text=فتح شبكة الجدول")
     page.wait_for_selector("#grid-entity")
     assert page.errors == []
+
+
+PHONE_PAGES = ["grid", "lessons", "validate", "reports", "timetables", "bells", "availability", "import", "school",
+               "setup/stages", "setup/grades", "setup/sections", "setup/divisions", "setup/subjects",
+               "setup/teachers", "setup/rooms", "setup/academic-years", "setup/terms", "setup/weekdays",
+               "setup/buildings", "setup/users"]
+
+
+def test_phone_layout_never_scrolls_sideways(page):
+    """On a phone the page itself never scrolls sideways (wide tables scroll inside their own box),
+    and the top bar stays compact (two rows at most)."""
+    page.set_viewport_size({"width": 390, "height": 844})
+    wide = []
+    for p in PHONE_PAGES:
+        page.goto(f"{page.base}/#/{p}")
+        page.wait_for_selector("#view h1, #view .title, #view table", timeout=10000)
+        page.wait_for_timeout(250)
+        sw = page.evaluate("document.documentElement.scrollWidth")
+        if sw > 391:
+            wide.append((p, sw))
+    assert wide == []
+    bar = page.evaluate("document.querySelector('.topbar').offsetHeight")
+    assert bar <= 110, bar
+    assert page.errors == []
