@@ -20,6 +20,16 @@ def clean():
     yield
 
 
+@pytest.fixture(scope="package", autouse=True)
+def _leave_database_empty(app):
+    """Whatever runs after the browser tests starts from an empty database, as the API tests expect."""
+    yield
+    with app.app_context():
+        tables = ", ".join(t.name for t in reversed(db.metadata.sorted_tables))
+        db.session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+        db.session.commit()
+
+
 @pytest.fixture(scope="session")
 def live_server(app):
     server = make_server("127.0.0.1", 0, app, threaded=True)

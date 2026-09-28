@@ -241,3 +241,31 @@ def test_navigation_scroll_and_anchors(page, live_server):
     top = page.evaluate("document.getElementById('templates').getBoundingClientRect().top")
     nav = page.evaluate("document.querySelector('.page-nav').getBoundingClientRect().bottom")
     assert top >= min(nav, 2000) - 1 or page.evaluate("window.scrollY") == 0
+
+
+def test_import_asc_xml_preview_then_commit(page, tmp_path):
+    from tests.test_import import ASC_XML
+    f = tmp_path / "school.xml"
+    f.write_text(ASC_XML, encoding="utf-8")
+    page.click(".sidebar a[href='#/import']")
+    page.wait_for_selector("#import-file", state="attached")
+    page.evaluate("document.getElementById('import-file').dataset.mark = '1'")
+    page.set_input_files("#import-file", str(f))
+    page.wait_for_timeout(500)
+    # the view is rendered once: the chosen file is not wiped by a second render
+    assert page.evaluate("document.getElementById('import-file').dataset.mark") == "1"
+    page.select_option("#import-stage", label="مرحلة جديدة…")
+    page.fill("#import-stage-name", "مرحلة aSc")
+    page.click("#import-preview")
+    expect(page.locator("#import-summary h2")).to_contain_text("لم يُحفظ شيء")
+    expect(page.locator("#import-summary")).to_contain_text("الدروس")
+    page.click("#import-commit")
+    expect(page.locator("#import-summary h2")).to_have_text("تم الاستيراد")
+    expect(page.locator("#tt-select option:checked")).to_contain_text("مستورد: school")
+    # the summary is not hidden under the top bar
+    top = page.evaluate("document.getElementById('import-summary').getBoundingClientRect().top")
+    bar = page.evaluate("document.querySelector('.topbar').getBoundingClientRect().bottom")
+    assert top >= bar - 1
+    page.click("text=فتح شبكة الجدول")
+    page.wait_for_selector("#grid-entity")
+    assert page.errors == []

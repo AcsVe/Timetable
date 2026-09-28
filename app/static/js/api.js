@@ -76,13 +76,14 @@ async function write(method, url, body, { key } = {}) {
 }
 
 /** multipart upload (e.g. the school logo); same idempotency + offline rules as other writes. */
-export async function upload(url, file, { key } = {}) {
+export async function upload(url, file, { key, fields = {} } = {}) {
   if (offline || navigator.onLine === false) {
     throw new ApiError(0, { error: 'offline', message: 'لا يوجد اتصال، لا يمكن الحفظ الآن',
                              message_en: 'No connection — cannot save right now' });
   }
   const fd = new FormData();
   fd.append('file', file);
+  for (const [k, v] of Object.entries(fields)) if (v != null) fd.append(k, v);
   const res = await fetch(url, { method: 'POST', credentials: 'same-origin', body: fd,
                                  headers: { Accept: 'application/json', 'Idempotency-Key': key || uuid() } });
   const data = await res.json().catch(() => ({}));

@@ -1,0 +1,72 @@
+"""The Excel import template: one sheet per kind of data, headings in Arabic, an example row each."""
+from __future__ import annotations
+
+import io
+
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+
+SHEETS = [
+    ("المباحث", ["المبحث", "الاسم بالإنجليزية", "الاختصار", "اللون"],
+     [["الرياضيات", "Mathematics", "ر", "#4F81BD"], ["التربية الرياضية", "Physical Education", "ريا", ""]]),
+    ("القاعات", ["القاعة", "الاسم بالإنجليزية", "الاختصار", "نوع القاعة", "السعة", "مشتركة"],
+     [["مختبر العلوم", "Science Lab", "مخ", "مختبر", 30, "لا"], ["الملعب", "Playground", "ملع", "ملعب", "", "نعم"]]),
+    ("المعلمون", ["اسم المعلم", "الاسم بالإنجليزية", "الاختصار", "اللقب", "الجنس", "البريد الإلكتروني", "الهاتف",
+                  "النصاب", "المباحث", "المراحل"],
+     [["أحمد محمود", "Ahmad Mahmoud", "أح", "أ.", "ذكر", "ahmad@school.edu", "0790000000", 24, "الرياضيات",
+       "المرحلة الأساسية"],
+      ["سلمى خالد", "Salma Khaled", "سل", "أ.", "أنثى", "", "", 22, "التربية الرياضية", "المرحلة الأساسية"]]),
+    ("الشعب", ["المرحلة", "الصف", "الشعبة", "عدد الطلبة", "مربي الصف", "القاعة الصفية"],
+     [["المرحلة الأساسية", "الصف السابع", "أ", 28, "أحمد محمود", ""],
+      ["المرحلة الأساسية", "الصف السابع", "ب", 27, "", ""]]),
+    ("الدروس", ["المبحث", "الصف", "الشعبة", "المجموعة", "المعلم", "الحصص الأسبوعية", "المدة", "القاعة المفضلة",
+                "ملاحظات"],
+     [["الرياضيات", "الصف السابع", "أ، ب", "", "أحمد محمود", 5, 1, "", "درس مشترك للشعبتين"],
+      ["التربية الرياضية", "الصف السابع", "أ", "", "سلمى خالد", 2, 2, "الملعب", "حصتان متتاليتان"]]),
+]
+
+NOTES = [
+    "طريقة الاستخدام",
+    "• املأ الأوراق التي تحتاجها فقط واحذف أمثلة الصفوف الرمادية أو اكتب فوقها؛ يمكن ترك أي ورقة فارغة.",
+    "• تُطابَق الأسماء مع الموجود في النظام، فلا يتكرر شيء عند إعادة الاستيراد: تُحدَّث السجلات الموجودة، ويُضاف الجديد.",
+    "• الخانة الفارغة لا تمحو القيمة المحفوظة.",
+    "• في ورقة «الدروس» اكتب أكثر من شعبة أو معلم مفصولين بفاصلة (،) ليكون الدرس مشتركاً.",
+    "• يمكن كتابة الشعبة بصيغة «الصف السابع / أ» والاستغناء عن عمود «الصف».",
+    "• «المدة» عدد الحصص المتتالية في البطاقة الواحدة (1 للحصة المفردة، 2 للحصة المزدوجة).",
+    "• «المجموعة» لدروس التقسيم (بنين/بنات، دراما/موسيقى)، ويجب أن تكون المجموعة معرَّفة في صفحة التقسيمات.",
+    "• يمكن أيضاً رفع ملف CSV لورقة واحدة بالعناوين نفسها.",
+]
+
+
+def build_template() -> bytes:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "تعليمات"
+    ws.sheet_view.rightToLeft = True
+    for i, line in enumerate(NOTES, start=1):
+        c = ws.cell(row=i, column=1, value=line)
+        c.alignment = Alignment(horizontal="right", wrap_text=True)
+        if i == 1:
+            c.font = Font(bold=True, size=14)
+    ws.column_dimensions["A"].width = 110
+    head_fill = PatternFill("solid", fgColor="1F4E8C")
+    example_font = Font(color="808080", italic=True)
+    for title, headers, examples in SHEETS:
+        s = wb.create_sheet(title)
+        s.sheet_view.rightToLeft = True
+        s.append(headers)
+        for c in s[1]:
+            c.font = Font(bold=True, color="FFFFFF")
+            c.fill = head_fill
+            c.alignment = Alignment(horizontal="center")
+        for row in examples:
+            s.append(row)
+            for c in s[s.max_row]:
+                c.font = example_font
+        for j, h in enumerate(headers, start=1):
+            s.column_dimensions[get_column_letter(j)].width = max(14, len(h) + 6)
+        s.freeze_panes = "A2"
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()

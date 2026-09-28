@@ -151,6 +151,9 @@ dialog::backdrop { background: rgba(16,24,40,.45); }
 /* bells */
 .bell-grid select { width: 100%; }
 .issues li { margin: 4px 0; }
+.small { font-size: .88rem; }
+fieldset.plain { border: 0; padding: 0; margin: 10px 0; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+fieldset.plain legend { font-weight: 600; margin-bottom: 4px; }
 .issues .err { color: var(--err); }
 .issues .warn { color: var(--warn); }
 .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }

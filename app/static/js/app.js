@@ -12,6 +12,7 @@ const ROUTES = {
   bells: () => import('./views/bells.js'),
   availability: () => import('./views/availability.js'),
   school: () => import('./views/school.js'),
+  import: () => import('./views/import.js'),
   setup: () => import('./views/crud.js'),
 };
 
