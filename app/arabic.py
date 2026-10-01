@@ -1,7 +1,8 @@
 """Grammatically correct Arabic (فصحى) for counted nouns and gendered phrases in messages."""
 from __future__ import annotations
 
-# noun -> (singular, dual, plural 3–10)
+# noun -> (singular, dual, plural 3–10); the dual in the genitive/accusative is DUAL_GEN
+DUAL_GEN = {"period": "حصتين", "slot": "خانتين", "gap": "فجوتين", "day": "يومين", "card": "بطاقتين", "teacher": "معلمَين"}
 NOUNS = {
     "period": ("حصة", "حصتان", "حصص"),
     "slot": ("خانة", "خانتان", "خانات"),
@@ -13,13 +14,13 @@ NOUNS = {
 FEMININE = {"period", "slot", "gap", "card"}
 
 
-def count(n: int, noun: str) -> str:
-    """3 → «3 حصص»، 11 → «11 حصة»، 1 → «حصة واحدة»، 2 → «حصتان»."""
+def count(n: int, noun: str, case: str = "nom") -> str:
+    """3 → «3 حصص»، 11 → «11 حصة»، 1 → «حصة واحدة»، 2 → «حصتان» (case="gen": «حصتين»، بعد حرف الجر)."""
     one, two, few = NOUNS[noun]
     if n == 1:
         return f"{one} {'واحدة' if noun in FEMININE else 'واحد'}"
     if n == 2:
-        return two
+        return DUAL_GEN[noun] if case == "gen" else two
     r = n % 100
     if 3 <= r <= 10:
         return f"{n} {few}"

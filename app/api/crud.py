@@ -33,6 +33,8 @@ from app.models import (
     Building,
     ConstraintRule,
     Division,
+    DutyAssignment,
+    ExamSession,
     Grade,
     Lesson,
     Room,
@@ -197,6 +199,74 @@ def _availability_write(obj: Availability, data: dict, creating: bool):
 
 def _constraint_write(obj: ConstraintRule, data: dict, creating: bool):
     _timetable_child_guard(obj)
+    if obj.kind == "weekly_load":
+        from app.rules.loads import normalize_params
+        obj.params = normalize_params(obj.params or {})
+        p = obj.params
+        obj.scope_type = "teacher" if p["teacher_ids"] else "subject" if p["subject_ids"] else "stage" if p["stage_ids"] else "global"
+        obj.scope_ids = [uuid.UUID(x) for x in (p["teacher_ids"] or p["subject_ids"] or p["stage_ids"])]
+
+
+def _ids_exist(model, raw, field_name) -> list[str]:
+    ids = parse_uuid_list(raw or [], field_name)
+    for i in ids:
+        _must_get(model, i, field_name)
+    return [str(i) for i in dict.fromkeys(ids)]
+
+
+def _extra_dict(value, field_name="extra") -> dict:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ApiError("validation", 400, details={"field": field_name, "reason": "must be an object"})
+    return value
+
+
+def _time_order(obj, field="ends_at"):
+    if obj.starts_at and obj.ends_at and obj.ends_at <= obj.starts_at:
+        raise ApiError("validation", 400, details={"field": field, "reason": "ends_before_start",
+                                                     "message": "يجب أن يكون وقت الانتهاء بعد وقت البدء"})
+
+
+def _exam_write(obj: ExamSession, data: dict, creating: bool):
+    _time_order(obj)
+    if "grade_ids" in data:
+        obj.grade_ids = [uuid.UUID(i) for i in _ids_exist(Grade, data["grade_ids"], "grade_ids")]
+    if "extra" in data:
+        obj.extra = _extra_dict(data["extra"])
+    if "rooms" in data:
+        raw = data["rooms"] or []
+        if not isinstance(raw, list):
+            raise ApiError("validation", 400, details={"field": "rooms", "reason": "must be a list"})
+        rooms = []
+        for i, r in enumerate(raw):
+            if not isinstance(r, dict):
+                raise ApiError("validation", 400, details={"field": f"rooms[{i}]", "reason": "must be an object"})
+            room_id = r.get("room_id") or None
+            if room_id:
+                room_id = str(_must_get(Room, parse_uuid(room_id, f"rooms[{i}].room_id"), f"rooms[{i}].room_id").id)
+            location = r.get("location")
+            if location is not None and not isinstance(location, str):
+                raise ApiError("validation", 400, details={"field": f"rooms[{i}].location", "reason": "must be text"})
+            rooms.append({
+                "room_id": room_id,
+                "location": (location or "").strip() or None,
+                "section_ids": _ids_exist(Section, r.get("section_ids"), f"rooms[{i}].section_ids"),
+                "teacher_ids": _ids_exist(Teacher, r.get("teacher_ids"), f"rooms[{i}].teacher_ids"),
+                "extra": _extra_dict(r.get("extra"), f"rooms[{i}].extra"),
+            })
+        obj.rooms = rooms
+    if obj.subject_id is None and not (obj.title or "").strip():
+        raise ApiError("validation", 400, details={"field": "subject_id", "reason": "required",
+                                                     "message": "اختر المبحث أو اكتب عنواناً للامتحان"})
+
+
+def _duty_write(obj: DutyAssignment, data: dict, creating: bool):
+    _time_order(obj)
+    if "teacher_ids" in data:
+        obj.teacher_ids = [uuid.UUID(i) for i in _ids_exist(Teacher, data["teacher_ids"], "teacher_ids")]
+    if "extra" in data:
+        obj.extra = _extra_dict(data["extra"])
 
 
 def _must_get(model, id_, field_name):
@@ -229,6 +299,8 @@ RESOURCES: dict[str, Resource] = {
     ),
     "availability": Resource(Availability, write_extra=_availability_write,
                              create_only_fields=frozenset({"timetable_id"})),
+    "exam-sessions": Resource(ExamSession, write_extra=_exam_write),
+    "duty-assignments": Resource(DutyAssignment, write_extra=_duty_write),
     "constraint-rules": Resource(ConstraintRule, write_extra=_constraint_write,
                                  create_only_fields=frozenset({"timetable_id"})),
     "users": Resource(
@@ -339,7 +411,7 @@ def list_resource(res_name):
     for k, v in request.args.items():
         if k in cols and k not in res.hidden_fields:
             q = q.where(cols[k] == query_value(cols[k], k, v))
-    order = [c for c in ("sort_order", "name_ar", "slot_no", "created_at") if c in cols]
+    order = [c for c in ("exam_date", "starts_at", "sort_order", "name_ar", "slot_no", "created_at") if c in cols]
     if order:
         q = q.order_by(*(cols[c] for c in order))
     items = db.session.scalars(q).all()
@@ -416,6 +488,37 @@ def delete_resource(res_name, id_):
     return {"id": str(obj.id), "deleted": True, "version": obj.version}, 200
 
 
+@api_bp.post("/<res_name>/bulk-delete")
+@write_endpoint
+def bulk_delete_resource(res_name):
+    """Delete several records at once: {"items": [{"id", "version"}, …]}. All or nothing:
+    one refusal (permission, stale version, dependants) cancels the whole batch."""
+    res = _get_res(res_name)
+    data = request.get_json(silent=True) or {}
+    items = data.get("items")
+    if not isinstance(items, list) or not items:
+        raise ApiError("validation", 400, details={"field": "items", "reason": "non-empty list required"})
+    if len(items) > 1000:
+        raise ApiError("validation", 400, details={"field": "items", "reason": "at most 1000"})
+    deleted = []
+    for i, it in enumerate(items):
+        if not isinstance(it, dict):
+            raise ApiError("validation", 400, details={"field": f"items[{i}]"})
+        obj = _get_obj(res, str(it.get("id")))
+        require_write(current_user, obj)
+        check_version(obj, it.get("version"))
+        if res.before_delete:
+            res.before_delete(obj)
+        deps = live_dependents(obj)
+        if deps:
+            raise ApiError("has_dependents", 409, details={**deps, "id": str(obj.id)})
+        obj.soft_delete()
+        _clean_after_delete(obj)
+        deleted.append(str(obj.id))
+    db.session.flush()
+    return {"deleted": deleted, "count": len(deleted)}, 200
+
+
 def _clean_after_delete(obj) -> None:
     for rel in ("stages", "subjects", "rooms"):
         if hasattr(obj, rel) and isinstance(getattr(obj, rel), list):
@@ -426,3 +529,10 @@ def _clean_after_delete(obj) -> None:
             select(Availability).where(Availability.entity_type == kind, Availability.entity_id == obj.id)
         ):
             a.soft_delete()
+    if isinstance(obj, Teacher):   # duty and invigilation lists hold teacher ids without a foreign key
+        tid = str(obj.id)
+        for d in db.session.scalars(select(DutyAssignment).where(DutyAssignment.teacher_ids.contains([obj.id]))):
+            d.teacher_ids = [x for x in d.teacher_ids if x != obj.id]
+        for e in db.session.scalars(select(ExamSession)):
+            if any(tid in (r.get("teacher_ids") or []) for r in e.rooms or []):
+                e.rooms = [{**r, "teacher_ids": [x for x in r.get("teacher_ids") or [] if x != tid]} for r in e.rooms]

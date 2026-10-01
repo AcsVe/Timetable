@@ -21,6 +21,8 @@ from app.models import AppSetting, Card, Lesson
 
 # Public settings any signed-in client may read (e.g. to know whether offline editing is on).
 PUBLIC_SETTINGS = {"offline_edit_enabled", "vapid_public_key", "school_week_start"}
+# Screen configuration (labels, lists, extra fields) every user needs to see the screens the same way.
+PUBLIC_PREFIXES = ("module:", "ui:")
 
 
 def _synced():
@@ -65,7 +67,7 @@ def list_settings():
     q = select(AppSetting)
     rows = db.session.scalars(q).all()
     if current_user.role != "admin":
-        rows = [r for r in rows if r.key in PUBLIC_SETTINGS]
+        rows = [r for r in rows if r.key in PUBLIC_SETTINGS or r.key.startswith(PUBLIC_PREFIXES)]
     return jsonify({r.key: r.value for r in rows})
 
 
@@ -76,6 +78,9 @@ def put_setting(key):
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or "value" not in data:
         raise ApiError("validation", 400, details={"field": "value"})
+    if key.startswith("module:"):
+        from app.rules.modules import normalize_module_config
+        data["value"] = normalize_module_config(key, data["value"])
     row = db.session.get(AppSetting, key) or AppSetting(key=key)
     row.value = data["value"]
     db.session.add(row)

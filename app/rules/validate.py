@@ -87,11 +87,18 @@ def validate_timetable(tt: Timetable) -> dict:
             Availability.status == "unavailable")):
         unavailable[a.entity_id] += 1
     max_periods_any_day = _max_periods_per_day(checker, lessons, school_days)
+    from app.rules.loads import statuses_by_teacher
+    load_status = statuses_by_teacher(tt)
     for t in teachers:
         req = required.get(t.id, 0)
         name, name_en = f"{teacher_title(t.gender)} {t.name_ar}", t.name_en or t.name_ar
         him = g(t.gender, "إليه", "إليها")
-        if t.target_weekly_periods is not None and req:
+        status = load_status.get(str(t.id))
+        if status and not status["default_rule"]:
+            if status["status"] in ("under", "over"):
+                _issue(warnings, f"load_rule_{status['status']}", status["message"], status["message_en"],
+                       teacher_id=t.id, rule_id=status["rule_id"])
+        elif t.target_weekly_periods is not None and req:
             if req > t.target_weekly_periods:
                 _issue(warnings, "teacher_over_target", f"{name}: أُسنِدت {him} {count(req, 'period')}، و{g(t.gender, 'نصابه', 'نصابها')} الأسبوعي {t.target_weekly_periods}",
                        f"{name_en}: assigned {req} periods, target {t.target_weekly_periods}", teacher_id=t.id)

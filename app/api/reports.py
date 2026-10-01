@@ -14,7 +14,7 @@ from app.auth.permissions import require_admin
 from app.errors import ApiError
 from app.extensions import db
 from app.models import School, Timetable
-from app.reports.data import KINDS, build_report, parse_filters
+from app.reports.data import KINDS, build_report, parse_filters, parse_show
 from app.reports.logo import logo_bytes
 
 MIME = {
@@ -39,7 +39,10 @@ def report(tt_id, kind):
         filters = parse_filters(request.args)
     except ValueError:
         raise ApiError("validation", 400, details={"reason": "invalid filter id"})
-    rep = build_report(tt, kind, lang, filters, request.args.get("layout", "rows"))
+    signature = [x.strip()[:60] for x in (request.args.get("signature") or "").split("|") if x.strip()][:6]
+    rep = build_report(tt, kind, lang, filters, request.args.get("layout", "rows"),
+                       style=request.args.get("style", "plain"), show=parse_show(request.args.get("show")),
+                       signature=signature)
     if fmt == "json":
         return jsonify(rep.to_json())
     if fmt not in MIME:

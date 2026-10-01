@@ -18,6 +18,8 @@ from app.models import (
     BellSchedule,
     Card,
     Division,
+    DutyAssignment,
+    ExamSession,
     Grade,
     Lesson,
     Section,
@@ -64,6 +66,8 @@ def stages_of(obj) -> set[uuid.UUID] | None:
         return GLOBAL
     if isinstance(obj, Teacher):
         return {s.id for s in obj.stages} or GLOBAL
+    if isinstance(obj, (ExamSession, DutyAssignment)):
+        return {obj.stage_id} if obj.stage_id else GLOBAL
     return GLOBAL
 
 

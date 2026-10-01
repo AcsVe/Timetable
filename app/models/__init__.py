@@ -39,3 +39,4 @@ from app.models.users import (  # noqa: F401
     PushSubscription,
     user_stage,
 )
+from app.models.school_ops import DutyAssignment, ExamSession  # noqa: F401

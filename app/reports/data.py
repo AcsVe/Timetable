@@ -29,10 +29,15 @@ from app.models import (
 from app.rules.bells import BellCache, resolve_schedule
 
 KINDS = (
-    "teacher-timetable", "section-timetable", "room-timetable",
-    "teacher-sections", "teacher-subjects",
-    "stats-teachers", "stats-subjects", "stats-sections",
+    "teacher-timetable", "section-timetable", "room-timetable", "subject-timetable",
+    "stage-timetable", "teachers-master", "free-teachers",
+    "teacher-sections", "teacher-subjects", "teacher-daily",
+    "stats-teachers", "stats-subjects", "stats-sections", "load-status",
+    "exam-schedule", "invigilation", "duty-roster", "duty-teachers",
 )
+# Tables that are a plain matrix (row label × column label) and can be turned on their side.
+MATRIX_KINDS = {"teacher-sections", "teacher-daily", "duty-roster"}
+SHOW_KEYS = ("teacher", "room", "times", "groups", "section", "footer")
 FILTER_KEYS = ("stage_id", "grade_id", "section_id", "teacher_id", "subject_id", "room_id")
 
 TITLES = {
@@ -44,6 +49,16 @@ TITLES = {
     "stats-teachers": ("إحصائيات المعلمين والنصاب", "Teacher load statistics"),
     "stats-subjects": ("إحصائيات المباحث", "Subject statistics"),
     "stats-sections": ("تغطية الحصص في الشعب", "Section coverage"),
+    "subject-timetable": ("جدول حصص المبحث", "Subject timetable"),
+    "stage-timetable": ("الجدول العام للمرحلة (الشعب)", "Master timetable (sections)"),
+    "teachers-master": ("الجدول العام للمعلمين", "Master timetable (teachers)"),
+    "free-teachers": ("المعلمون المتاحون في كل حصة (لحصص الإشغال)", "Free teachers per period (for cover)"),
+    "teacher-daily": ("توزيع حصص المعلم على أيام الأسبوع", "Teacher periods per day"),
+    "load-status": ("اكتمال النصاب حسب القواعد", "Load status by rule"),
+    "exam-schedule": ("جدول الامتحانات", "Exam timetable"),
+    "invigilation": ("جدول المراقبة على الامتحانات", "Invigilation schedule"),
+    "duty-roster": ("جدول المناوبة", "Duty roster"),
+    "duty-teachers": ("مناوبات كل معلم", "Duties per teacher"),
 }
 
 
@@ -89,6 +104,29 @@ class Table:
     numeric: set[int] = field(default_factory=set)
     percent: set[int] = field(default_factory=set)
     totals: list | None = None
+    group_header: list | None = None                  # [(label, span), …] row drawn above the column headers
+    cell_colors: dict = field(default_factory=dict)   # (row, col) -> "#rrggbb", used only in the colour style
+    compact: bool = False                             # many narrow columns (master timetables)
+    subtitle: str | None = None
+    row_groups: list = field(default_factory=list)    # row indices that start a new group (a new day)
+
+
+def transpose(t: Table, total_label: str) -> Table:
+    """Swap rows and columns of a matrix table; a «total» column becomes the totals row and back."""
+    rows = [list(r) for r in t.rows]
+    cols = list(t.columns)
+    has_total_col = cols and cols[-1] == total_label
+    new_cols = [cols[0]] + [r[0] for r in rows] + ([total_label] if t.totals else [])
+    new_rows = []
+    for j in range(1, len(cols)):
+        new_rows.append([cols[j]] + [r[j] for r in rows] + ([t.totals[j]] if t.totals else []))
+    totals = None
+    if has_total_col and new_rows:
+        totals = new_rows.pop()
+        totals[0] = total_label
+    colors = {(j - 1, i + 1): c for (i, j), c in t.cell_colors.items() if j >= 1}
+    return Table(title=t.title, columns=new_cols, rows=new_rows, numeric=set(range(1, len(new_cols))) if t.numeric else set(),
+                 totals=totals, cell_colors=colors, compact=t.compact, subtitle=t.subtitle)
 
 
 @dataclass
@@ -103,6 +141,10 @@ class Report:
     grids: list[Grid] = field(default_factory=list)
     tables: list[Table] = field(default_factory=list)
     layout: str = "rows"   # timetables: "rows" = days as rows (ASC print style), "cols" = days as columns
+    style: str = "plain"   # "plain": black on white, no shading (best for black-and-white printers); "color"
+    signature: list = field(default_factory=list)   # signature boxes printed under every page's content
+    notes: list = field(default_factory=list)       # lines printed after the tables
+    orientable: bool = False                        # the screen may offer to turn this report on its side
 
     @property
     def rtl(self) -> bool:
@@ -110,7 +152,9 @@ class Report:
 
     def to_json(self) -> dict:
         return {
-            "kind": self.kind, "lang": self.lang, "layout": self.layout, "title": self.title, "school_name": self.school_name,
+            "kind": self.kind, "lang": self.lang, "layout": self.layout, "style": self.style, "title": self.title,
+            "school_name": self.school_name, "signature": self.signature, "notes": self.notes,
+            "orientable": self.orientable,
             "timetable_name": self.timetable_name, "filters": self.filters, "generated_at": self.generated_at,
             "grids": [{
                 "title": g.title, "days": g.days, "periods": [{"no": n, "time": t} for n, t in g.periods],
@@ -119,7 +163,11 @@ class Report:
                 "subtitle": g.subtitle, "day_notes": g.day_notes,
             } for g in self.grids],
             "tables": [{"title": t.title, "columns": t.columns, "rows": t.rows, "numeric": sorted(t.numeric),
-                        "percent": sorted(t.percent), "totals": t.totals} for t in self.tables],
+                        "percent": sorted(t.percent), "totals": t.totals,
+                        "group_header": [{"label": a, "span": b} for a, b in t.group_header] if t.group_header else None,
+                        "cell_colors": [{"row": r, "col": c, "color": v} for (r, c), v in sorted(t.cell_colors.items())]
+                        if self.style == "color" else [],
+                        "compact": t.compact, "subtitle": t.subtitle, "row_groups": t.row_groups} for t in self.tables],
         }
 
 
@@ -127,8 +175,9 @@ class Report:
 class Ctx:
     """Everything a report needs, loaded once."""
 
-    def __init__(self, tt: Timetable, lang: str, filters: dict):
+    def __init__(self, tt: Timetable, lang: str, filters: dict, show: set | None = None):
         self.tt, self.lang, self.f = tt, lang, filters
+        self.show = set(SHOW_KEYS) if show is None else show
         self.stages = {s.id: s for s in db.session.scalars(select(Stage))}
         self.grades = {g.id: g for g in db.session.scalars(select(Grade))}
         self.sections = {s.id: s for s in db.session.scalars(select(Section))}
@@ -302,6 +351,9 @@ def _grid_for(ctx: Ctx, title: str, cards: list[Card], entry, grade_ids: list | 
             grid.cells.setdefault((day_idx[c.weekday_id], p), []).append(entry(c, l))
     total = sum(c.duration for c in cards if c.weekday_id)
     grid.footer = ctx.L(f"مجموع الحصص: {total}", f"Total periods: {total}")
+    if "times" not in ctx.show:
+        grid.periods = [(p, None) for p, _t in grid.periods]
+        grid.day_notes = []
     return grid
 
 
@@ -316,8 +368,11 @@ def teacher_grids(ctx: Ctx) -> list[Grid]:
         cards = [c for c in ctx.cards if t.id in ctx.lesson[c.lesson_id].teacher_ids]
 
         def entry(c, l):
-            lines = [ctx.name(ctx.subjects.get(l.subject_id)), ctx.sep.join(ctx.target_label(x) for x in l.targets)]
-            if c.room_id:
+            lines = [ctx.name(ctx.subjects.get(l.subject_id))]
+            if "section" in ctx.show:
+                lines.append(ctx.sep.join(ctx.target_label(x) if "groups" in ctx.show else ctx.section_label(x.section_id)
+                                          for x in l.targets))
+            if c.room_id and "room" in ctx.show:
                 lines.append(ctx.name(ctx.rooms.get(c.room_id)))
             return lines
         title = f"{ctx.L('المعلمة' if t.gender == 'f' else 'المعلم', 'Teacher')}: {ctx.name(t)}"
@@ -351,9 +406,10 @@ def section_grids(ctx: Ctx) -> list[Grid]:
         def entry(c, l, sid=sid):
             groups = [ctx.name(ctx.groups.get(t.group_id)) for t in l.targets if t.section_id == sid and t.group_id]
             subj = ctx.name(ctx.subjects.get(l.subject_id))
-            lines = [f"{subj} ({ctx.sep.join(groups)})" if groups else subj,
-                     ctx.sep.join(ctx.short_teacher(ctx.teachers[x]) for x in l.teacher_ids if x in ctx.teachers)]
-            if c.room_id:
+            lines = [f"{subj} ({ctx.sep.join(groups)})" if groups and "groups" in ctx.show else subj]
+            if "teacher" in ctx.show:
+                lines.append(ctx.sep.join(ctx.short_teacher(ctx.teachers[x]) for x in l.teacher_ids if x in ctx.teachers))
+            if c.room_id and "room" in ctx.show:
                 lines.append(ctx.name(ctx.rooms.get(c.room_id)))
             return lines
         title = f"{ctx.L('الشعبة', 'Section')}: {ctx.section_label(sid)}"
@@ -376,9 +432,12 @@ def room_grids(ctx: Ctx) -> list[Grid]:
         cards = [c for c in ctx.cards if c.room_id == rid]
 
         def entry(c, l):
-            return [ctx.name(ctx.subjects.get(l.subject_id)),
-                    ctx.sep.join(ctx.target_label(x) for x in l.targets),
-                    ctx.sep.join(ctx.short_teacher(ctx.teachers[x]) for x in l.teacher_ids if x in ctx.teachers)]
+            lines = [ctx.name(ctx.subjects.get(l.subject_id))]
+            if "section" in ctx.show:
+                lines.append(ctx.sep.join(ctx.target_label(x) for x in l.targets))
+            if "teacher" in ctx.show:
+                lines.append(ctx.sep.join(ctx.short_teacher(ctx.teachers[x]) for x in l.teacher_ids if x in ctx.teachers))
+            return lines
         grids.append(_grid_for(ctx, f"{ctx.L('القاعة', 'Room')}: {ctx.name(room)}", cards, entry, None))
     return grids
 
@@ -441,20 +500,30 @@ def stats_teachers(ctx: Ctx) -> Table:
     ids = [ctx.f["teacher_id"]] if ctx.f.get("teacher_id") else list(assigned)
     sep = ctx.sep
     rows = []
+    from app.rules.loads import statuses_by_teacher
+    status = statuses_by_teacher(ctx.tt)
+    colors = {}
     for tid in sorted((i for i in ids if i in ctx.teachers), key=lambda i: ctx.name(ctx.teachers[i])):
         t = ctx.teachers[tid]
         target = t.target_weekly_periods
+        st = status.get(str(tid))
+        label = ((st["label_en"] if ctx.lang == "en" else st["label"]) if st else "") or ""
+        if st and st["status"] in ("under", "over"):
+            label = f"{label} ({st['delta']})"
         rows.append([ctx.name(t), sep.join(sorted(ctx.name(s) for s in t.stages)), sep.join(sorted(subs[tid])),
                      len(secs[tid]), assigned[tid], placed[tid], target,
                      (assigned[tid] - target) if target is not None else None,
-                     (assigned[tid] / target) if target else None])
+                     (assigned[tid] / target) if target else None, label])
+        if st and st.get("color"):
+            colors[(len(rows) - 1, 9)] = st["color"]
     total = lambda i: sum(r[i] or 0 for r in rows)  # noqa: E731
     return Table(title=ctx.L("النصاب المُسنَد مقارنةً بالنصاب المطلوب", "Assigned load vs. target"),
                  columns=[ctx.L("المعلم", "Teacher"), ctx.L("المراحل", "Stages"), ctx.L("المباحث", "Subjects"),
                           ctx.L("عدد الشعب", "Sections"), ctx.L("المُسنَد", "Assigned"), ctx.L("المُدرَج في الجدول", "Placed"),
-                          ctx.L("النصاب", "Target"), ctx.L("الفرق", "Difference"), ctx.L("نسبة النصاب", "Load %")],
-                 rows=rows, numeric={3, 4, 5, 6, 7}, percent={8},
-                 totals=[ctx.L("المجموع", "Total"), "", "", None, total(4), total(5), total(6), None, None])
+                          ctx.L("النصاب", "Target"), ctx.L("الفرق", "Difference"), ctx.L("نسبة النصاب", "Load %"),
+                          ctx.L("حالة النصاب", "Load status")],
+                 rows=rows, numeric={3, 4, 5, 6, 7}, percent={8}, cell_colors=colors,
+                 totals=[ctx.L("المجموع", "Total"), "", "", None, total(4), total(5), total(6), None, None, ""])
 
 
 def stats_subjects(ctx: Ctx) -> Table:
@@ -496,32 +565,474 @@ def stats_sections(ctx: Ctx) -> Table:
                          sum(r[4] for r in rows), None, sum(r[6] for r in rows)])
 
 
-def build_report(tt: Timetable, kind: str, lang: str, filters: dict, layout: str = "rows") -> Report:
-    ctx = Ctx(tt, lang, filters)
+def subject_grids(ctx: Ctx) -> list[Grid]:
+    ids = [ctx.f["subject_id"]] if ctx.f.get("subject_id") else sorted(
+        {l.subject_id for l in ctx.scoped_lessons()}, key=lambda i: ctx.name(ctx.subjects.get(i)))
+    grids = []
+    for sub_id in ids:
+        subj = ctx.subjects.get(sub_id)
+        if subj is None:
+            continue
+        lessons = {l.id for l in ctx.scoped_lessons() if l.subject_id == sub_id}
+        cards = [c for c in ctx.cards if c.lesson_id in lessons]
+
+        def entry(c, l):
+            lines = [ctx.sep.join(ctx.target_label(x) if "groups" in ctx.show else ctx.section_label(x.section_id)
+                                  for x in l.targets)]
+            if "teacher" in ctx.show:
+                lines.append(ctx.sep.join(ctx.short_teacher(ctx.teachers[x]) for x in l.teacher_ids if x in ctx.teachers))
+            if c.room_id and "room" in ctx.show:
+                lines.append(ctx.name(ctx.rooms.get(c.room_id)))
+            return lines
+        grid = _grid_for(ctx, f"{ctx.L('المبحث', 'Subject')}: {ctx.name(subj)}", cards, entry, None)
+        teachers = sorted({ctx.name(ctx.teachers[t]) for l in ctx.lessons if l.id in lessons for t in l.teacher_ids
+                           if t in ctx.teachers})
+        if teachers:
+            grid.subtitle = f"{ctx.L('المعلمون', 'Teachers')}: {ctx.sep.join(teachers)}"
+        grids.append(grid)
+    return grids
+
+
+def _slot_columns(ctx: Ctx, grade_ids=None):
+    """[(day_index, day, period_no)] for every lesson period of the school week (union over the grades)."""
+    grades = [ctx.grades[g] for g in grade_ids] if grade_ids else list(ctx.grades.values())
+    out = []
+    for di, d in enumerate(ctx.days):
+        ps = set()
+        for g in grades:
+            ps.update((ctx.bells.periods(g, d.id) or {}).keys())
+        out += [(di, d, p) for p in sorted(ps)]
+    return out
+
+
+def _cell_text(ctx: Ctx, cards, slot, line):
+    di, d, p = slot
+    texts = []
+    for c in cards:
+        if c.weekday_id == d.id and c.period_no <= p < c.period_no + c.duration:
+            l = ctx.lesson.get(c.lesson_id)
+            if l is not None:
+                texts.append(line(c, l))
+    return "\n".join(t for t in texts if t) or None
+
+
+def _short_subject(ctx: Ctx, sid) -> str:
+    s = ctx.subjects.get(sid)
+    if s is None:
+        return ""
+    short = s.short_en if ctx.lang == "en" else s.short_ar
+    if short:
+        return short
+    name = ctx.name(s)
+    if ctx.lang != "en":   # «اللغة العربية» → «العربية»، «التربية الإسلامية» → «الإسلامية» for the narrow master sheet
+        for prefix in ("اللغة ", "التربية ", "مبحث "):
+            if name.startswith(prefix) and len(name) > len(prefix) + 2:
+                return name[len(prefix):]
+    return name
+
+
+def master_table(ctx: Ctx, who: str, layout: str) -> Table:
+    """The whole stage on one sheet, like ASC's main screen: one line per section (or teacher)
+    and one column per day × period — or, turned on its side, one line per day × period."""
+    if who == "sections":
+        entities = sorted((sid for sid in ctx.sections if ctx.section_in_scope(sid)), key=ctx.section_sort_key)
+        label = ctx.section_label
+        grade_ids = list({ctx.sections[s].grade_id for s in entities}) or None
+
+        def cards_of(sid):
+            ls = {l.id for l in ctx.lessons if any(t.section_id == sid for t in l.targets) and ctx.lesson_in_scope(l)}
+            return [c for c in ctx.cards if c.lesson_id in ls]
+
+        def line(c, l):
+            parts = [_short_subject(ctx, l.subject_id)]
+            if "teacher" in ctx.show:
+                parts.append("/".join(ctx.short_teacher(ctx.teachers[x]) for x in l.teacher_ids if x in ctx.teachers))
+            return "\n".join(x for x in parts if x)
+        corner = ctx.L("الشعبة", "Section")
+    else:
+        ids = {tid for l in ctx.scoped_lessons() for tid in l.teacher_ids}
+        if ctx.f.get("teacher_id"):
+            ids = {ctx.f["teacher_id"]}
+        entities = sorted((i for i in ids if i in ctx.teachers), key=lambda i: ctx.name(ctx.teachers[i]))
+        label = lambda i: ctx.short_teacher(ctx.teachers[i]) if layout == "cols" else ctx.name(ctx.teachers[i])  # noqa: E731
+        grade_ids = None
+
+        def cards_of(tid):
+            return [c for c in ctx.cards if tid in ctx.lesson[c.lesson_id].teacher_ids]
+
+        def line(c, l):
+            secs = ctx.sep.join(ctx.section_label(x.section_id) for x in l.targets)
+            return f"{secs} · {_short_subject(ctx, l.subject_id)}" if "section" in ctx.show else _short_subject(ctx, l.subject_id)
+        corner = ctx.L("المعلم", "Teacher")
+    slots = _slot_columns(ctx, grade_ids)
+    cards = {e: cards_of(e) for e in entities}
+    title = ctx.describe_filters() or ctx.L("جميع المراحل", "All stages")
+    if layout == "cols":
+        cols = [ctx.L("اليوم / الحصة", "Day / period")] + [label(e) for e in entities]
+        rows = [[f"{ctx.name(d)} — {p}"] + [_cell_text(ctx, cards[e], (di, d, p), line) for e in entities]
+                for di, d, p in slots]
+        starts = [i for i, (di, _d, _p) in enumerate(slots) if i == 0 or slots[i - 1][0] != di]
+        return Table(title=title, columns=cols, rows=rows, compact=True, row_groups=starts)
+    group = []
+    for di, d in enumerate(ctx.days):
+        n = sum(1 for x in slots if x[0] == di)
+        if n:
+            group.append((ctx.name(d), n))
+    cols = [corner] + [str(p) for _di, _d, p in slots]
+    rows = [[label(e)] + [_cell_text(ctx, cards[e], sl, line) for sl in slots] for e in entities]
+    return Table(title=title, columns=cols, rows=rows, group_header=[("", 1)] + group, compact=True)
+
+
+def free_teacher_grid(ctx: Ctx) -> list[Grid]:
+    """Who is free at each period (not teaching and not marked unavailable) — the list to pick a
+    substitute from. Only teachers of the filtered stage / subject when a filter is set."""
+    from app.models import Availability
+    pool = [t for t in ctx.teachers.values()
+            if (not ctx.f.get("stage_id") or ctx.f["stage_id"] in {s.id for s in t.stages})
+            and (not ctx.f.get("subject_id") or ctx.f["subject_id"] in {s.id for s in t.subjects}
+                 or any(ctx.f["subject_id"] == l.subject_id and t.id in l.teacher_ids for l in ctx.lessons))]
+    pool = [t for t in pool if any(t.id in l.teacher_ids for l in ctx.lessons) or t.target_weekly_periods]
+    pool.sort(key=lambda t: ctx.name(t))
+    busy = defaultdict(set)
+    for c in ctx.cards:
+        if c.weekday_id:
+            for tid in ctx.lesson[c.lesson_id].teacher_ids:
+                for p in range(c.period_no, c.period_no + c.duration):
+                    busy[(c.weekday_id, p)].add(tid)
+    for a in db.session.scalars(select(Availability).where(Availability.timetable_id == ctx.tt.id,
+                                                           Availability.entity_type == "teacher")):
+        busy[(a.weekday_id, a.period_no)].add(a.entity_id)
+    grid = _grid_for(ctx, ctx.L("المعلمون المتاحون في كل حصة", "Teachers free in each period"), [], lambda c, l: [], None)
+    for di, d in enumerate(ctx.days):
+        for p, _tl in grid.periods:
+            if (di, p) in grid.missing:
+                continue
+            free = [ctx.short_teacher(t) for t in pool if t.id not in busy[(d.id, p)]]
+            if free:
+                grid.cells[(di, p)] = [[ctx.L(f"المتاحون: {len(free)}", f"Free: {len(free)}"), ctx.sep.join(free)]]
+    grid.footer = ctx.L(f"عدد المعلمين في القائمة: {len(pool)}", f"Teachers considered: {len(pool)}")
+    return [grid]
+
+
+def teacher_daily(ctx: Ctx) -> Table:
+    per = defaultdict(lambda: defaultdict(set))
+    for c in ctx.cards:
+        if not c.weekday_id:
+            continue
+        l = ctx.lesson[c.lesson_id]
+        if not ctx.lesson_in_scope(l):
+            continue
+        for tid in l.teacher_ids:
+            per[tid][c.weekday_id].update(range(c.period_no, c.period_no + c.duration))
+    ids = [ctx.f["teacher_id"]] if ctx.f.get("teacher_id") else [t for t in per]
+    rows, colors = [], {}
+    for i, tid in enumerate(sorted((x for x in ids if x in ctx.teachers), key=lambda x: ctx.name(ctx.teachers[x]))):
+        counts = [len(per[tid].get(d.id, ())) or None for d in ctx.days]
+        gaps = 0
+        for d in ctx.days:
+            ps = sorted(per[tid].get(d.id, ()))
+            if ps:
+                gaps += (ps[-1] - ps[0] + 1) - len(ps)
+        t = ctx.teachers[tid]
+        busiest = max([c or 0 for c in counts] or [0])
+        if t.max_periods_per_day is not None and busiest > t.max_periods_per_day:
+            for j, c in enumerate(counts):
+                if (c or 0) > t.max_periods_per_day:
+                    colors[(i, j + 1)] = "#fde68a"
+        rows.append([ctx.name(t), *counts, sum(c or 0 for c in counts), gaps,
+                     sum(1 for c in counts if c)])
+    n = len(ctx.days)
+    totals = [ctx.L("المجموع", "Total"), *[sum(r[j + 1] or 0 for r in rows) or None for j in range(n)],
+              sum(r[n + 1] for r in rows), sum(r[n + 2] for r in rows), None]
+    return Table(title=ctx.L("عدد الحصص في كل يوم والفجوات", "Periods per day and gaps"),
+                 columns=[ctx.L("المعلم", "Teacher"), *[ctx.name(d) for d in ctx.days], ctx.L("المجموع", "Total"),
+                          ctx.L("الفجوات", "Gaps"), ctx.L("أيام الدوام", "Days")],
+                 rows=rows, numeric=set(range(1, n + 4)), totals=totals, cell_colors=colors)
+
+
+def load_status_tables(ctx: Ctx) -> tuple[list[Table], list[str]]:
+    from app.rules.loads import evaluate
+    data = evaluate(ctx.tt)
+    en = ctx.lang == "en"
+    rows, colors = [], {}
+    want = ctx.f.get("teacher_id")
+    for r in data["teachers"]:
+        if want and r["teacher_id"] != str(want):
+            continue
+        t = ctx.teachers.get(uuid.UUID(r["teacher_id"]))
+        if ctx.f.get("stage_id") and t and ctx.f["stage_id"] not in {s.id for s in t.stages}:
+            continue
+        if ctx.f.get("subject_id") and ctx.name(ctx.subjects.get(ctx.f["subject_id"])) not in r["subjects"] \
+                and not (t and ctx.f["subject_id"] in {s.id for s in t.subjects}):
+            continue
+        status = (r["label_en"] if en else r["label"]) or "—"
+        diff = (-r["delta"] if r["status"] == "under" else r["delta"]) if r["status"] in ("under", "over") else 0
+        rows.append([ctx.name(t) if t else r["name"], ctx.sep.join(r["subjects"]), r["assigned"], r["placed"],
+                     r["expected_en"] if en else r["expected"], status, diff if r["status"] != "none" else None,
+                     r["rule_name"] or (ctx.L("نصاب المعلم", "Teacher's own target") if r["default_rule"] else "")])
+        if r["color"]:
+            colors[(len(rows) - 1, 5)] = r["color"]
+    t1 = Table(title=ctx.L("حالة النصاب لكل معلم", "Load status per teacher"),
+               columns=[ctx.L("المعلم", "Teacher"), ctx.L("المباحث", "Subjects"), ctx.L("المُسنَد", "Assigned"),
+                        ctx.L("المُدرَج في الجدول", "Placed"), ctx.L("النصاب المطلوب", "Expected"),
+                        ctx.L("الحالة", "Status"), ctx.L("الفرق", "Difference"), ctx.L("القاعدة", "Rule")],
+               rows=rows, numeric={2, 3, 6}, cell_colors=colors)
+    tables = [t1]
+    if data["groups"]:
+        g_rows, g_colors = [], {}
+        for i, gr in enumerate(data["groups"]):
+            g_rows.append([gr["name"] or (gr["scope_en"] if en else gr["scope"]), gr["teachers"], gr["actual"],
+                           gr["expected"], gr["counts"]["ok"], gr["counts"]["under"], gr["counts"]["over"],
+                           gr["label"] or "—"])
+            if gr["color"]:
+                g_colors[(i, 7)] = gr["color"]
+        tables.append(Table(title=ctx.L("ملخص القواعد (المبحث / المرحلة / المعلمون)", "Summary per rule"),
+                            columns=[ctx.L("القاعدة", "Rule"), ctx.L("عدد المعلمين", "Teachers"),
+                                     ctx.L("مجموع الحصص", "Periods"), ctx.L("المطلوب", "Expected"),
+                                     ctx.L("مكتمل", "Complete"), ctx.L("نقص", "Under"), ctx.L("زيادة", "Over"),
+                                     ctx.L("الحالة", "Status")],
+                            rows=g_rows, numeric={1, 2, 4, 5, 6}, cell_colors=g_colors))
+    s = data["summary"]
+    note = ctx.L(f"مكتمل: {s['ok']} — نقص: {s['under']} — زيادة: {s['over']} — بلا نصاب محدد: {s['none']}",
+                 f"Complete: {s['ok']} — under: {s['under']} — over: {s['over']} — no target: {s['none']}")
+    return tables, [note]
+
+
+# ---------------------------------------------------------------------------
+# Exams and duties (per term of the timetable)
+# ---------------------------------------------------------------------------
+def _module(ctx: Ctx, name: str) -> dict:
+    from app.rules.modules import load_module
+    return load_module(name)
+
+
+def _lab(ctx: Ctx, mod: dict, field_: str) -> str:
+    lab = mod["labels"][field_]
+    return (lab.get("en") or lab["ar"]) if ctx.lang == "en" else lab["ar"]
+
+
+def _extra_cols(ctx: Ctx, mod: dict, level: str):
+    return [f for f in mod["extra_fields"] if f.get("level", "session") == level and f.get("show_in_report", True)]
+
+
+def _extra_value(ctx: Ctx, f: dict, v):
+    if v in (None, "", []):
+        return ""
+    if f["type"] == "teachers":
+        ids = v if isinstance(v, list) else [v]
+        return ctx.sep.join(ctx.name(ctx.teachers.get(uuid.UUID(x))) for x in ids if _is_uuid(x) and uuid.UUID(x) in ctx.teachers)
+    if f["type"] == "bool":
+        return "✓" if v else ""
+    return str(v)
+
+
+def _is_uuid(x) -> bool:
+    try:
+        uuid.UUID(str(x))
+        return True
+    except ValueError:
+        return False
+
+
+def _day_name(ctx: Ctx, d) -> str:
+    names_ar = ["الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"]
+    names_en = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    return (names_en if ctx.lang == "en" else names_ar)[d.weekday()]
+
+
+def _time_span(a, b) -> str:
+    if a and b:
+        return f"{a.strftime('%H:%M')}–{b.strftime('%H:%M')}"
+    return a.strftime("%H:%M") if a else ""
+
+
+def _exams(ctx: Ctx):
+    from app.models import ExamSession
+    q = select(ExamSession).where(ExamSession.term_id == ctx.tt.term_id).order_by(ExamSession.exam_date, ExamSession.starts_at)
+    out = []
+    for e in db.session.scalars(q):
+        if ctx.f.get("stage_id") and e.stage_id and e.stage_id != ctx.f["stage_id"]:
+            continue
+        if ctx.f.get("grade_id") and e.grade_ids and ctx.f["grade_id"] not in e.grade_ids:
+            continue
+        if ctx.f.get("subject_id") and e.subject_id != ctx.f["subject_id"]:
+            continue
+        out.append(e)
+    return out
+
+
+def exam_schedule(ctx: Ctx) -> Table:
+    mod = _module(ctx, "exams")
+    ex_s, ex_r = _extra_cols(ctx, mod, "session"), _extra_cols(ctx, mod, "room")
+    cols = [_lab(ctx, mod, "exam_date"), ctx.L("اليوم", "Day"), _lab(ctx, mod, "session_label"),
+            ctx.L("الوقت", "Time"), _lab(ctx, mod, "stage_id"), _lab(ctx, mod, "grade_ids"), _lab(ctx, mod, "subject_id"),
+            *[(f["label_en"] or f["label_ar"]) if ctx.lang == "en" else f["label_ar"] for f in ex_s],
+            _lab(ctx, mod, "room_id"), _lab(ctx, mod, "location"), _lab(ctx, mod, "section_ids"),
+            _lab(ctx, mod, "teacher_ids"),
+            *[(f["label_en"] or f["label_ar"]) if ctx.lang == "en" else f["label_ar"] for f in ex_r]]
+    rows = []
+    for e in _exams(ctx):
+        subject = ctx.name(ctx.subjects.get(e.subject_id)) if e.subject_id else ""
+        if e.title:
+            subject = f"{subject} — {e.title}" if subject else e.title
+        head = [e.exam_date.isoformat(), _day_name(ctx, e.exam_date), e.session_label or "",
+                _time_span(e.starts_at, e.ends_at), ctx.name(ctx.stages.get(e.stage_id)) if e.stage_id else "",
+                ctx.sep.join(ctx.name(ctx.grades.get(g)) for g in e.grade_ids or [] if g in ctx.grades), subject,
+                *[_extra_value(ctx, f, (e.extra or {}).get(f["key"])) for f in ex_s]]
+        rooms = e.rooms or [{}]
+        for r in rooms:
+            if ctx.f.get("teacher_id") and str(ctx.f["teacher_id"]) not in (r.get("teacher_ids") or []):
+                continue
+            if ctx.f.get("room_id") and r.get("room_id") != str(ctx.f["room_id"]):
+                continue
+            room = ctx.rooms.get(uuid.UUID(r["room_id"])) if r.get("room_id") else None
+            rows.append(head + [ctx.name(room) if room else "", r.get("location") or "",
+                                ctx.sep.join(ctx.section_label(uuid.UUID(x)) for x in r.get("section_ids") or []
+                                             if uuid.UUID(x) in ctx.sections),
+                                ctx.sep.join(ctx.name(ctx.teachers.get(uuid.UUID(x))) for x in r.get("teacher_ids") or []
+                                             if uuid.UUID(x) in ctx.teachers),
+                                *[_extra_value(ctx, f, (r.get("extra") or {}).get(f["key"])) for f in ex_r]])
+    title = mod["title"]["en"] if ctx.lang == "en" else mod["title"]["ar"]
+    return Table(title=title, columns=cols, rows=rows)
+
+
+def invigilation(ctx: Ctx) -> Table:
+    mod = _module(ctx, "exams")
+    per = defaultdict(list)
+    for e in _exams(ctx):
+        subject = ctx.name(ctx.subjects.get(e.subject_id)) if e.subject_id else (e.title or "")
+        for r in e.rooms or []:
+            room = ctx.rooms.get(uuid.UUID(r["room_id"])) if r.get("room_id") else None
+            where = ctx.name(room) if room else (r.get("location") or "")
+            for x in r.get("teacher_ids") or []:
+                if not _is_uuid(x) or uuid.UUID(x) not in ctx.teachers:
+                    continue
+                per[uuid.UUID(x)].append(" ".join(v for v in (
+                    e.exam_date.isoformat(), _day_name(ctx, e.exam_date), e.session_label or "",
+                    _time_span(e.starts_at, e.ends_at), "—", subject, f"({where})" if where else "") if v))
+    ids = [ctx.f["teacher_id"]] if ctx.f.get("teacher_id") else list(per)
+    rows = [[ctx.name(ctx.teachers[t]), len(per[t]), "\n".join(per[t])]
+            for t in sorted((i for i in ids if i in ctx.teachers), key=lambda i: ctx.name(ctx.teachers[i]))]
+    return Table(title=ctx.L("عدد المراقبات ومواعيدها لكل معلم", "Invigilation duties per teacher"),
+                 columns=[ctx.L("المعلم", "Teacher"), ctx.L("عدد المراقبات", "Count"), _lab(ctx, mod, "exam_date")],
+                 rows=rows, numeric={1}, totals=[ctx.L("المجموع", "Total"), sum(r[1] for r in rows), ""])
+
+
+def _duties(ctx: Ctx):
+    from app.models import DutyAssignment
+    out = []
+    for d in db.session.scalars(select(DutyAssignment).where(DutyAssignment.term_id == ctx.tt.term_id)
+                                .order_by(DutyAssignment.sort_order, DutyAssignment.starts_at)):
+        if ctx.f.get("stage_id") and d.stage_id and d.stage_id != ctx.f["stage_id"]:
+            continue
+        if ctx.f.get("teacher_id") and ctx.f["teacher_id"] not in (d.teacher_ids or []):
+            continue
+        out.append(d)
+    return out
+
+
+def duty_roster(ctx: Ctx) -> Table:
+    """Rows: each duty (time slot · purpose · location); columns: the school days; cells: teachers."""
+    mod = _module(ctx, "duties")
+    duties = _duties(ctx)
+    keyed = {}
+    for d in duties:
+        key = (d.time_label or "", _time_span(d.starts_at, d.ends_at), d.duty_type, d.location or "",
+               ctx.name(ctx.stages.get(d.stage_id)) if d.stage_id else "")
+        keyed.setdefault(key, {"order": (d.sort_order, d.starts_at.isoformat() if d.starts_at else "99"), "days": defaultdict(list)})
+        for wd in ([d.weekday_id] if d.weekday_id else [x.id for x in ctx.days]):
+            keyed[key]["days"][wd] += [ctx.short_teacher(ctx.teachers[t]) if ctx.lang == "en" else ctx.name(ctx.teachers[t])
+                                       for t in d.teacher_ids or [] if t in ctx.teachers]
+    rows = []
+    for key, v in sorted(keyed.items(), key=lambda kv: kv[1]["order"]):
+        label = "\n".join(x for x in (" ".join(y for y in key[:2] if y), key[2], key[3], key[4]) if x)
+        rows.append([label] + ["\n".join(v["days"].get(d.id, [])) or None for d in ctx.days])
+    title = mod["title"]["en"] if ctx.lang == "en" else mod["title"]["ar"]
+    corner = f"{_lab(ctx, mod, 'time_label')} / {_lab(ctx, mod, 'duty_type')} / {_lab(ctx, mod, 'location')}"
+    return Table(title=title, columns=[corner] + [ctx.name(d) for d in ctx.days], rows=rows)
+
+
+def duty_teachers(ctx: Ctx) -> Table:
+    mod = _module(ctx, "duties")
+    per = defaultdict(list)
+    days = {d.id: ctx.name(d) for d in ctx.days}
+    for d in _duties(ctx):
+        when = days.get(d.weekday_id, ctx.L("كل الأيام", "Every day")) if d.weekday_id else ctx.L("كل الأيام", "Every day")
+        text = " — ".join(x for x in (when, " ".join(y for y in (d.time_label or "", _time_span(d.starts_at, d.ends_at)) if y),
+                                      d.duty_type, d.location or "") if x)
+        n = 1 if d.weekday_id else len(ctx.days)
+        for t in d.teacher_ids or []:
+            if t in ctx.teachers:
+                per[t].append((text, n))
+    ids = [ctx.f["teacher_id"]] if ctx.f.get("teacher_id") else list(per)
+    rows = [[ctx.name(ctx.teachers[t]), sum(n for _x, n in per[t]), "\n".join(x for x, _n in per[t])]
+            for t in sorted((i for i in ids if i in ctx.teachers), key=lambda i: ctx.name(ctx.teachers[i]))]
+    return Table(title=ctx.L("عدد المناوبات الأسبوعية ومواعيدها لكل معلم", "Weekly duties per teacher"),
+                 columns=[ctx.L("المعلم", "Teacher"), ctx.L("عدد المناوبات أسبوعياً", "Duties per week"),
+                          _lab(ctx, mod, "duty_type")],
+                 rows=rows, numeric={1}, totals=[ctx.L("المجموع", "Total"), sum(r[1] for r in rows), ""])
+
+
+def build_report(tt: Timetable, kind: str, lang: str, filters: dict, layout: str = "rows", style: str = "plain",
+                 show: set | None = None, signature: list | None = None) -> Report:
+    ctx = Ctx(tt, lang, filters, show)
     school = db.session.scalars(select(School)).first()
     rep = Report(
         kind=kind, lang=lang, title=TITLES[kind][1 if lang == "en" else 0],
         school_name=(school.name_en if lang == "en" and school and school.name_en else (school.name_ar if school else "")),
         timetable_name=tt.name, filters=ctx.describe_filters(), layout=layout if layout in ("rows", "cols") else "rows",
         generated_at=datetime.now(ZoneInfo(os.environ.get("APP_TIMEZONE", "Asia/Amman"))).strftime("%Y-%m-%d %H:%M"),
+        style=style if style in ("plain", "color") else "plain", signature=[x for x in (signature or []) if x],
     )
+    rep.orientable = kind.endswith("-timetable") or kind in ("teachers-master", "free-teachers") or kind in MATRIX_KINDS
     if kind == "teacher-timetable":
         rep.grids = teacher_grids(ctx)
     elif kind == "section-timetable":
         rep.grids = section_grids(ctx)
     elif kind == "room-timetable":
         rep.grids = room_grids(ctx)
+    elif kind == "subject-timetable":
+        rep.grids = subject_grids(ctx)
+    elif kind == "free-teachers":
+        rep.grids = free_teacher_grid(ctx)
+    elif kind == "stage-timetable":
+        rep.tables = [master_table(ctx, "sections", rep.layout)]
+    elif kind == "teachers-master":
+        rep.tables = [master_table(ctx, "teachers", rep.layout)]
     elif kind == "teacher-sections":
         rep.tables = [teacher_sections(ctx)]
     elif kind == "teacher-subjects":
         rep.tables = [teacher_subjects(ctx)]
+    elif kind == "teacher-daily":
+        rep.tables = [teacher_daily(ctx)]
     elif kind == "stats-teachers":
         rep.tables = [stats_teachers(ctx)]
     elif kind == "stats-subjects":
         rep.tables = [stats_subjects(ctx)]
     elif kind == "stats-sections":
         rep.tables = [stats_sections(ctx)]
+    elif kind == "load-status":
+        rep.tables, rep.notes = load_status_tables(ctx)
+    elif kind == "exam-schedule":
+        rep.tables = [exam_schedule(ctx)]
+    elif kind == "invigilation":
+        rep.tables = [invigilation(ctx)]
+    elif kind == "duty-roster":
+        rep.tables = [duty_roster(ctx)]
+    elif kind == "duty-teachers":
+        rep.tables = [duty_teachers(ctx)]
+    if kind in MATRIX_KINDS and rep.layout == "cols":
+        rep.tables = [transpose(t, ctx.L("المجموع", "Total")) for t in rep.tables]
+    if "footer" not in ctx.show:
+        for g_ in rep.grids:
+            g_.footer = None
     return rep
+
+
+def parse_show(raw: str | None) -> set | None:
+    if raw is None:
+        return None
+    return {x for x in raw.split(",") if x in SHOW_KEYS}
 
 
 def parse_filters(args) -> dict:
