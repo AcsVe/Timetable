@@ -151,6 +151,34 @@ dialog::backdrop { background: rgba(16,24,40,.45); }
 /* bells */
 .bell-grid select { width: 100%; }
 .issues li { margin: 4px 0; }
+
+/* start page & import */
+.nav-strong { font-weight: 700; color: var(--accent) !important; }
+.hero { display: flex; gap: 14px; align-items: center; max-width: 760px; padding: 16px 18px; margin-bottom: 18px;
+  background: var(--accent); color: #fff; border-radius: var(--radius); text-decoration: none; }
+.hero .muted { color: #dbe6f5; display: block; margin-top: 2px; }
+.hero strong { font-size: 1.1rem; }
+.hero-icon, .drop-icon { font-size: 2rem; line-height: 1; }
+.steps { list-style: none; padding: 0; margin: 0; max-width: 760px; }
+.steps li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px; }
+.steps li.next { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(31,78,140,.15); }
+.steps li.done { opacity: .75; }
+.step-body { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.step-body .chip { align-self: flex-start; }
+.step-mark { flex: 0 0 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent-2); color: var(--accent); font-weight: 700; }
+.steps li.done .step-mark { background: #2e7d32; color: #fff; }
+.step-head { display: flex; align-items: center; gap: 10px; font-size: 1.05rem; margin: 18px 0 10px; }
+.step-head:first-child { margin-top: 0; }
+.import-box { max-width: 760px; }
+.dropzone { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 26px 16px; cursor: pointer;
+  border: 2px dashed var(--accent); border-radius: var(--radius); background: var(--accent-2); color: var(--accent); text-align: center; }
+.dropzone.over { background: #dbe6f5; }
+.drop-name { font-weight: 700; color: var(--ink); word-break: break-all; }
+.btn.big { padding: 10px 26px; font-size: 1.05rem; }
+details.more { margin-top: 14px; }
+details.more summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .small { font-size: .88rem; }
 fieldset.plain { border: 0; padding: 0; margin: 10px 0; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
 fieldset.plain legend { font-weight: 600; margin-bottom: 4px; }

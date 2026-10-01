@@ -247,13 +247,17 @@ def test_import_asc_xml_preview_then_commit(page, tmp_path):
     from tests.test_import import ASC_XML
     f = tmp_path / "school.xml"
     f.write_text(ASC_XML, encoding="utf-8")
-    page.click(".sidebar a[href='#/import']")
+    # the start page leads straight to the import
+    page.goto(f"{page.base}/#/home")
+    expect(page.locator(".steps li")).to_have_count(9)
+    page.click("#home-import")
     page.wait_for_selector("#import-file", state="attached")
     page.evaluate("document.getElementById('import-file').dataset.mark = '1'")
     page.set_input_files("#import-file", str(f))
     page.wait_for_timeout(500)
     # the view is rendered once: the chosen file is not wiped by a second render
     assert page.evaluate("document.getElementById('import-file').dataset.mark") == "1"
+    page.click("summary:has-text('خيارات إضافية')")
     page.select_option("#import-stage", label="مرحلة جديدة…")
     page.fill("#import-stage-name", "مرحلة aSc")
     page.click("#import-preview")

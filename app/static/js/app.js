@@ -4,6 +4,7 @@ import { state, isAdmin } from './store.js';
 import { h, jumpTo, toastError } from './ui.js';
 
 const ROUTES = {
+  home: () => import('./views/home.js'),
   grid: () => import('./views/grid.js'),
   lessons: () => import('./views/lessons.js'),
   validate: () => import('./views/validate.js'),
@@ -33,7 +34,7 @@ let freshNavigation = false;
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
 function parseHash() {
-  const raw = location.hash.replace(/^#\/?/, '') || 'grid';
+  const raw = location.hash.replace(/^#\/?/, '') || 'home';
   const [path, query = ''] = raw.split('?');
   return { path, params: new URLSearchParams(query) };
 }

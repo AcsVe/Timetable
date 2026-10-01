@@ -6,7 +6,7 @@
  *  - writes are never queued here: offline saves are refused with a clear message.
  * Bump VERSION when static files change.
  */
-const VERSION = '2026.09.28-2';
+const VERSION = '2026.10.01-1';
 const SHELL = `shell-${VERSION}`;
 const FONTS = 'fonts-v1';
 const PRECACHE = [
@@ -30,6 +30,7 @@ const PRECACHE = [
   '/static/js/views/availability.js',
   '/static/js/views/school.js',
   '/static/js/views/import.js',
+  '/static/js/views/home.js',
   '/static/js/views/crud.js',
   '/static/icons/icon-192.png',
   '/static/icons/icon-512.png',

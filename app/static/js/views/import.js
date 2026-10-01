@@ -22,7 +22,7 @@ export async function render(root) {
   let busy = false;
 
   const fileInput = h('input', { type: 'file', id: 'import-file', accept: '.xlsx,.xlsm,.csv,.txt,.xml,.roz' });
-  const fileName = h('span', { class: 'muted' }, t('لم يُختر ملف'));
+  const fileName = h('span', { class: 'drop-name' }, t('لم يُختر ملف'));
   const kindSel = h('select', { id: 'import-kind' }, KINDS.map(([v, l]) => h('option', { value: v }, t(l))));
   const kindRow = h('label', { class: 'inline', hidden: true }, `${t('محتوى ملف CSV')}:`, kindSel);
   const stageSel = h('select', { id: 'import-stage' },
@@ -33,7 +33,7 @@ export async function render(root) {
   const ttName = h('input', { id: 'import-tt-name', value: '' });
   const destNew = h('input', { type: 'radio', name: 'dest', value: 'new', checked: true });
   const destCur = h('input', { type: 'radio', name: 'dest', value: 'current', disabled: !tt || tt.status === 'archived' });
-  const previewBtn = h('button', { class: 'btn', id: 'import-preview', type: 'button', disabled: true }, t('معاينة'));
+  const previewBtn = h('button', { class: 'btn big', id: 'import-preview', type: 'button', disabled: true }, t('معاينة'));
   const result = h('div', { id: 'import-result' });
 
   const reset = () => { key = null; swap(result); };
@@ -139,25 +139,42 @@ export async function render(root) {
   }
 
   fileInput.style.display = 'none';
+  // Drag & drop onto the big file box (desktop); a tap opens the file picker (phone).
+  const drop = h('label', { class: 'dropzone', for: 'import-file' },
+    h('span', { class: 'drop-icon', 'aria-hidden': 'true' }, '⇪'),
+    h('strong', {}, t('اضغط هنا لاختيار الملف')),
+    h('span', { class: 'muted small' }, t('ملف aSc ‏(‎.xml) أو Excel ‏(‎.xlsx) أو CSV')),
+    fileName);
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('over');
+    if (e.dataTransfer.files[0]) { fileInput.files = e.dataTransfer.files; fileInput.dispatchEvent(new Event('change')); }
+  });
+
+  const stepHead = (n, text) => h('h2', { class: 'step-head' }, h('span', { class: 'step-mark' }, String(n)), text);
   put(root,
     h('h1', { class: 'title' }, t('الاستيراد')),
-    h('div', { class: 'stat', style: { maxWidth: '860px' } },
-      h('p', {}, t('استورد المعلمين والمباحث والقاعات والشعب والدروس من ملف Excel أو CSV، أو استورد جدولاً كاملاً من aSc Timetables. تُعرض معاينة أولاً، ولا يُحفظ شيء قبل التأكيد، ولا يتكرر شيء عند إعادة الاستيراد.')),
-      h('ul', { class: 'muted small' },
-        h('li', {}, t('Excel ‏(‎.xlsx): استخدم القالب الجاهز؛ لكل نوع من البيانات ورقة مستقلة.')),
-        h('li', {}, t('CSV: جدول واحد بالعناوين نفسها، ويُقبل الترميز UTF-8 وترميز ويندوز العربي.')),
-        h('li', {}, t('aSc Timetables: صدِّر من البرنامج عبر: ملف ← تصدير ← aSc Timetables XML، وارفع ملف ‎.xml. ويُقبل ملف ‎.roz إذا كان بصيغة XML.'))),
-      h('a', { class: 'btn ghost', href: '/api/import/template.xlsx', download: '' }, t('تنزيل قالب Excel'))),
-    h('div', { class: 'stat', style: { maxWidth: '860px', marginTop: '14px' } },
-      h('div', { class: 'toolbar' },
-        h('label', { class: 'btn ghost', for: 'import-file' }, t('اختيار ملف')), fileInput, fileName, kindRow),
-      h('div', { class: 'toolbar' },
-        h('label', { class: 'inline' }, `${t('المرحلة للشعب التي لم تُحدَّد مرحلتها')}:`, stageSel), stageName),
-      h('fieldset', { class: 'plain' },
-        h('legend', {}, t('الدروس والحصص تُستورد إلى')),
-        h('label', { class: 'inline' }, destNew, t('جدول جديد باسم'), ttName),
-        h('label', { class: 'inline' }, destCur,
-          tt ? `${t('الجدول المعروض حالياً')}: ${tt.name}` : t('الجدول المعروض حالياً'))),
-      h('div', { class: 'toolbar' }, previewBtn)),
+    h('div', { class: 'stat import-box' },
+      stepHead(1, t('اختر الملف')), drop, fileInput, kindRow,
+      stepHead(2, t('اضغط «معاينة» لترى ما سيُضاف قبل الحفظ')),
+      h('div', { class: 'toolbar' }, previewBtn),
+      stepHead(3, t('راجع المعاينة ثم اضغط «تأكيد الاستيراد»')),
+      h('details', { class: 'more' },
+        h('summary', {}, t('خيارات إضافية (اختيارية)')),
+        h('div', { class: 'toolbar' },
+          h('label', { class: 'inline' }, `${t('المرحلة للشعب التي لم تُحدَّد مرحلتها')}:`, stageSel), stageName),
+        h('fieldset', { class: 'plain' },
+          h('legend', {}, t('الدروس والحصص تُستورد إلى')),
+          h('label', { class: 'inline' }, destNew, t('جدول جديد باسم'), ttName),
+          h('label', { class: 'inline' }, destCur,
+            tt ? `${t('الجدول المعروض حالياً')}: ${tt.name}` : t('الجدول المعروض حالياً')))),
+      h('details', { class: 'more' },
+        h('summary', {}, t('من أين أحصل على الملف؟')),
+        h('ul', { class: 'small' },
+          h('li', {}, t('aSc Timetables: صدِّر من البرنامج عبر: ملف ← تصدير ← aSc Timetables XML، وارفع ملف ‎.xml. ويُقبل ملف ‎.roz إذا كان بصيغة XML.')),
+          h('li', {}, t('Excel ‏(‎.xlsx): استخدم القالب الجاهز؛ لكل نوع من البيانات ورقة مستقلة.')),
+          h('li', {}, t('CSV: جدول واحد بالعناوين نفسها، ويُقبل الترميز UTF-8 وترميز ويندوز العربي.'))),
+        h('a', { class: 'btn ghost small', href: '/api/import/template.xlsx', download: '' }, t('تنزيل قالب Excel')))),
     result);
 }
