@@ -82,7 +82,8 @@ def test_duty_roster_clash_lesson_overlap_copy_and_report(ops):
     codes = [i["code"] for i in issues]
     assert "duty_clash" in codes and "duty_during_lesson" in codes
     lesson_issue = next(i for i in issues if i["code"] == "duty_during_lesson")
-    assert "الرياضيات" in lesson_issue["message"] and "08:00–08:45" in lesson_issue["message"]
+    msg = lesson_issue["message"].replace("\u200e", "")
+    assert "الرياضيات" in msg and "08:00–08:45" in msg
     roster = a.ok("get", url(s, "duty-roster"))["tables"][0]
     assert roster["columns"][1] == "الأحد" and any("أحمد" in (c or "") for r in roster["rows"] for c in r[1:])
     turned = a.ok("get", url(s, "duty-roster", layout="cols"))["tables"][0]

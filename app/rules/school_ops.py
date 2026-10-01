@@ -8,7 +8,7 @@ from datetime import time
 
 from sqlalchemy import select
 
-from app.arabic import teacher_title
+from app.arabic import g, teacher_title
 from app.extensions import db
 from app.models import Card, DutyAssignment, ExamSession, Lesson, Room, Section, Subject, Teacher, Timetable, Weekday
 from app.rules.bells import resolve_schedule
@@ -26,7 +26,7 @@ def _fmt(t: time | None) -> str:
 
 
 def _span(a: time | None, b: time | None) -> str:
-    return f"{_fmt(a)}–{_fmt(b)}" if a and b else (_fmt(a) or "")
+    return f"{_fmt(a)}\u200e–\u200e{_fmt(b)}" if a and b else (_fmt(a) or "")   # LRM keeps the order in Arabic text
 
 
 def _tname(t: Teacher | None, en=False) -> str:
@@ -97,6 +97,17 @@ def check_exams(term_id: uuid.UUID) -> list[dict]:
                            f"Section {(sec.name_en or sec.name_ar) if sec else '?'}: {la} and {lb} at the same time ({day.isoformat()})",
                            section_id=sid, exam_ids=[str(a.id), str(b.id)])
     for e in exams:
+        seen_t = defaultdict(int)
+        for r in e.rooms or []:
+            for x in set(r.get("teacher_ids") or []):
+                seen_t[x] += 1
+        for x, n in seen_t.items():
+            if n > 1:
+                t = teachers.get(uuid.UUID(x))
+                _issue(out, "invigilator_two_rooms",
+                       f"{_tname(t)}: {g(t.gender if t else None, 'مراقب', 'مراقبة')} في قاعتين من امتحان {exam_label(e, subjects)} نفسه ({e.exam_date.isoformat()})",
+                       f"{_tname(t, True)}: invigilating two rooms of the same {exam_label(e, subjects)} exam ({e.exam_date.isoformat()})",
+                       teacher_id=x, exam_id=e.id)
         for r in e.rooms or []:
             if not r.get("teacher_ids"):
                 where = rooms.get(uuid.UUID(r["room_id"])).name_ar if r.get("room_id") and rooms.get(uuid.UUID(r["room_id"])) else (r.get("location") or "")

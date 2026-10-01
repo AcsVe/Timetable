@@ -9,7 +9,7 @@ export async function render(root) {
   const f = (name, label, v, extra = {}) => h('div', { class: 'field' }, h('label', { for: `s-${name}` }, label),
     h('input', { id: `s-${name}`, name, value: v ?? '', ...extra }));
 
-  const preview = h('img', { src: school?.logo_path || '', style: { maxHeight: '90px' }, hidden: !school?.logo_path, alt: '' });
+  const preview = h('img', { src: school?.logo_path || '', style: { maxHeight: '90px' }, hidden: !school?.logo_path, alt: t('معاينة شعار المدرسة') });
   const setLogo = path => {
     preview.src = path || '';
     preview.hidden = !path;

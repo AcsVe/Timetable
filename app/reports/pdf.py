@@ -61,6 +61,7 @@ def _register():
     _registered = True
 
 
+_TIME_RANGE = __import__("re").compile(r"(\d{1,2}:\d{2})\u200e?\s*([–-])\s*\u200e?(\d{1,2}:\d{2})")
 _reshaper = arabic_reshaper.ArabicReshaper(configuration={"delete_harakat": False, "support_ligatures": True})
 
 
@@ -102,7 +103,8 @@ def rich(text, rtl: bool, bold: bool = False, width: float | None = None, size: 
         logical += _wrap_logical(line, width, size, bold)
     for line in logical:
         has_ar = any(_is_arabic(ch) for ch in line)
-        visual = get_display(_reshaper.reshape(line), base_dir="R" if (rtl and has_ar) else "L")
+        line = _TIME_RANGE.sub("\\1\u200e\\2\u200e\\3", line)   # «08:00–08:45» stays in reading order inside Arabic
+        visual = get_display(_reshaper.reshape(line), base_dir="R" if (rtl and has_ar) else "L").replace("\u200e", "")
         runs, cur, cur_font = [], "", None
         for ch in visual:
             f = ar_font if _is_arabic(ch) else (cur_font if ch == " " and cur_font else lat_font)

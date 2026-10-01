@@ -35,6 +35,7 @@ export async function render(root) {
             h('td', {}, s.slots.at(-1)?.ends_at.slice(0, 5) || ''),
             h('td', { style: { whiteSpace: 'nowrap' } },
               h('button', { class: 'btn small ghost', onclick: () => { selectedSchedule = s; drawEditor(); jumpTo('slots'); } }, t('تعديل الحصص')), ' ',
+              canEdit() ? h('button', { class: 'btn small ghost', onclick: () => renameSchedule(s) }, t('تعديل الاسم')) : null, ' ',
               canEdit() ? h('button', { class: 'btn small ghost', onclick: () => cloneSchedule(s) }, t('نسخ كقالب جديد')) : null, ' ',
               canEdit() ? h('button', { class: 'btn small ghost', onclick: () => removeSchedule(s) }, t('حذف')) : null));
         })))
@@ -75,6 +76,17 @@ export async function render(root) {
       const c = await api.post('/api/bell-schedules', { name_ar: v.name_ar, stage_id: s.stage_id, slots: s.slots });
       invalidate('bell-schedules'); selectedSchedule = c; await drawSchedules(); drawEditor(); await drawAssignments();
     } });
+  const renameSchedule = s => openForm({ title: `${t('تعديل اسم قالب التوقيت')}`, values: s, fields: [
+      { name: 'name_ar', label: t('اسم القالب'), required: true, placeholder: t('دوام عادي') },
+      { name: 'name_en', label: t('الاسم (إنجليزي)'), placeholder: 'Normal day' },
+      { name: 'stage_id', label: t('المرحلة'), type: 'select', options: stageOpts(), help: t('اتركها فارغة ليكون القالب عامّاً لجميع المراحل') }],
+    onSubmit: async v => {
+      const r = await api.patch(`/api/bell-schedules/${s.id}`, { version: s.version, name_ar: v.name_ar, name_en: v.name_en, stage_id: v.stage_id });
+      invalidate('bell-schedules');
+      if (selectedSchedule && selectedSchedule.id === s.id) selectedSchedule = r;
+      toast(t('تم الحفظ'), 'ok');
+      await drawSchedules(); drawEditor(); await drawAssignments();
+    } });
   async function removeSchedule(s) {
     if (!(await confirmBox(t('أتريد حذف هذا السجل؟')))) return;
     try { await api.del(`/api/bell-schedules/${s.id}`, s.version); invalidate('bell-schedules'); await drawSchedules(); }
@@ -91,17 +103,37 @@ export async function render(root) {
       let p = 0;
       rows.forEach((r, i) => { r.slot_no = i + 1; r.period_no = r.kind === 'lesson' ? ++p : null; });
     }
+    let shift = true;   // changing a slot's length or end moves every later slot by the same amount
+    const len = r => toMin(r.ends_at) - toMin(r.starts_at);
+    const moveAfter = (i, delta) => { if (!shift || !delta) return; for (const x of rows.slice(i + 1)) { x.starts_at = toTime(toMin(x.starts_at) + delta); x.ends_at = toTime(toMin(x.ends_at) + delta); } };
     function drawRows() {
       renumber();
       body.replaceChildren(...rows.map((r, i) => h('tr', {},
         h('td', {}, r.kind === 'lesson' ? `${t('الحصة')} ${r.period_no}` : ''),
-        h('td', {}, h('select', { disabled: !canEdit(), onchange: e => { r.kind = e.target.value; drawRows(); } },
+        h('td', {}, h('select', { disabled: !canEdit(), 'aria-label': t('النوع'), onchange: e => { r.kind = e.target.value; drawRows(); } },
           h('option', { value: 'lesson', selected: r.kind === 'lesson' }, t('حصة')),
           h('option', { value: 'break', selected: r.kind === 'break' }, t('استراحة')))),
-        h('td', {}, h('input', { value: r.label_ar || '', disabled: !canEdit(), oninput: e => { r.label_ar = e.target.value || null; } })),
-        h('td', {}, h('input', { type: 'time', value: r.starts_at, disabled: !canEdit(), oninput: e => { r.starts_at = e.target.value; } })),
-        h('td', {}, h('input', { type: 'time', value: r.ends_at, disabled: !canEdit(), oninput: e => { r.ends_at = e.target.value; } })),
-        h('td', {}, canEdit() ? h('button', { class: 'btn small ghost', onclick: () => { rows.splice(i, 1); drawRows(); } }, '×') : null))));
+        h('td', {}, h('input', { value: r.label_ar || '', disabled: !canEdit(), 'aria-label': t('التسمية'),
+          placeholder: r.kind === 'break' ? t('الاستراحة') : t('مثال: الحصة الأولى'), oninput: e => { r.label_ar = e.target.value || null; } })),
+        h('td', {}, h('input', { type: 'time', value: r.starts_at, disabled: !canEdit(), 'aria-label': `${t('من')} — ${i + 1}`,
+          onchange: e => { const d = toMin(e.target.value) - toMin(r.starts_at); r.starts_at = e.target.value; r.ends_at = toTime(toMin(r.ends_at) + d); moveAfter(i, d); drawRows(); } })),
+        h('td', {}, h('input', { type: 'time', value: r.ends_at, disabled: !canEdit(), 'aria-label': `${t('إلى')} — ${i + 1}`,
+          onchange: e => { const d = toMin(e.target.value) - toMin(r.ends_at); r.ends_at = e.target.value; moveAfter(i, d); drawRows(); } })),
+        h('td', {}, h('input', { type: 'number', min: 1, max: 240, value: len(r), class: 'narrow', disabled: !canEdit(),
+          'aria-label': `${t('المدة بالدقائق')} — ${i + 1}`,
+          onchange: e => { const n = Number(e.target.value) || len(r); const d = n - len(r); r.ends_at = toTime(toMin(r.starts_at) + n); moveAfter(i, d); drawRows(); } })),
+        h('td', { style: { whiteSpace: 'nowrap' } }, canEdit() ? [
+          h('button', { class: 'btn small ghost', title: t('إدراج حصة بعدها'), 'aria-label': t('إدراج حصة بعدها'), onclick: () => insertAfter(i, 'lesson') }, `+${t('حصة')}`),
+          h('button', { class: 'btn small ghost', title: t('إدراج استراحة بعدها'), 'aria-label': t('إدراج استراحة بعدها'), onclick: () => insertAfter(i, 'break') }, `+${t('استراحة')}`),
+          h('button', { class: 'btn small ghost', title: t('حذف'), 'aria-label': t('حذف'), onclick: () => { const d = -len(r); rows.splice(i, 1); moveAfter(i - 1, d); drawRows(); } }, '×')] : null))));
+    }
+    function insertAfter(i, kind) {
+      const prev = rows[i];
+      const n = kind === 'lesson' ? 45 : 20;
+      const start = toMin(prev.ends_at);
+      rows.splice(i + 1, 0, { kind, label_ar: kind === 'break' ? t('الاستراحة') : null, starts_at: toTime(start), ends_at: toTime(start + n) });
+      moveAfter(i + 1, n);
+      drawRows();
     }
     function addRow(kind) {
       const last = rows.at(-1);
@@ -122,9 +154,13 @@ export async function render(root) {
     }
     drawRows();
     swap(editorHost, h('div', { class: 'stat', id: 'slots', style: { marginTop: '14px' } },
-      h('h3', {}, `${t('حصص القالب')}: ${nameOf(s)}`),
-      h('table', { class: 'data' }, h('thead', {}, h('tr', {},
-        ['', t('النوع'), t('التسمية'), t('من'), t('إلى'), ''].map(x => h('th', {}, x)))), body),
+      h('div', { class: 'toolbar' }, h('h3', {}, `${t('حصص القالب')}: ${nameOf(s)}`),
+        canEdit() ? h('button', { class: 'btn small ghost', onclick: () => renameSchedule(s) }, t('تعديل الاسم')) : null),
+      h('div', { class: 'grid-scroll' }, h('table', { class: 'data' }, h('thead', {}, h('tr', {},
+        ['', t('النوع'), t('التسمية'), t('من'), t('إلى'), t('المدة (دقيقة)'), ''].map(x => h('th', {}, x)))), body)),
+      canEdit() ? h('label', { class: 'inline', style: { marginTop: '8px' } },
+        h('input', { type: 'checkbox', checked: shift, onchange: e => { shift = e.target.checked; } }),
+        t('عند تغيير مدة حصة أو وقت انتهائها تتحرك أوقات الحصص التالية تلقائياً')) : null,
       canEdit() ? h('div', { class: 'toolbar', style: { marginTop: '10px' } },
         h('button', { class: 'btn ghost small', onclick: () => addRow('lesson') }, `+ ${t('حصة')}`),
         h('button', { class: 'btn ghost small', onclick: () => addRow('break') }, `+ ${t('استراحة')}`),

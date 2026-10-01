@@ -842,7 +842,7 @@ def _day_name(ctx: Ctx, d) -> str:
 
 def _time_span(a, b) -> str:
     if a and b:
-        return f"{a.strftime('%H:%M')}–{b.strftime('%H:%M')}"
+        return f"{a.strftime('%H:%M')}\u200e–\u200e{b.strftime('%H:%M')}"   # LRM: keeps «from–to» in order inside Arabic text
     return a.strftime("%H:%M") if a else ""
 
 

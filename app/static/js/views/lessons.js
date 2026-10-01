@@ -2,8 +2,9 @@
 import * as api from '../api.js';
 import { t } from '../i18n.js';
 import { canEdit } from '../store.js';
-import { confirmBox, h, nameOf, openForm, toast, toastError, put, swap } from '../ui.js';
+import { bulkTable, confirmBox, h, nameOf, openForm, searchBox, toast, toastError, put, swap } from '../ui.js';
 import { loadContext, noTimetable } from './ctx.js';
+import { loadNotice, statusBadge } from './loads.js';
 
 export async function render(root) {
   let ctx = await loadContext();
@@ -77,42 +78,59 @@ export async function render(root) {
     return true;
   }
 
+  let query = '';
+  let table = null;
+  let loadsDone = null;
   function draw() {
-    const rows = ctx.lessons.filter(matches).map(l => {
-      const total = l.cards.reduce((a, c) => a + c.duration, 0);
-      const placed = l.cards.filter(c => c.weekday_id).reduce((a, c) => a + c.duration, 0);
-      const subj = ctx.subject[l.subject_id];
-      return h('tr', { dataset: { id: l.id } },
-        h('td', {}, h('span', { class: 'swatch', style: { background: subj?.color || '#dbe7f7' } }), ' ', nameOf(subj)),
-        h('td', {}, l.targets.map(tg => h('span', { class: 'chip' }, ctx.targetLabel(tg)))),
-        h('td', {}, l.teachers.map(x => h('span', { class: 'chip' }, nameOf(ctx.teacher[x.teacher_id])))),
-        h('td', {}, l.periods_per_week),
-        h('td', {}, l.duration === 1 ? t('مفردة') : l.duration === 2 ? t('مزدوجة') : l.duration),
-        h('td', { class: placed < total ? 'muted' : '' }, `${placed} / ${total}`),
-        h('td', { style: { whiteSpace: 'nowrap' } }, canEdit() && !ctx.readOnly ? [
-          h('button', { class: 'btn small ghost', onclick: () => edit(l) }, t('تعديل')), ' ',
-          h('button', { class: 'btn small ghost', onclick: () => remove(l) }, t('حذف'))] : null));
+    const editable = canEdit() && !ctx.readOnly;
+    table = bulkTable({
+      items: ctx.lessons.filter(matches),
+      text: l => [nameOf(ctx.subject[l.subject_id]), ...l.targets.map(tg => ctx.targetLabel(tg)),
+                  ...l.teachers.map(x => nameOf(ctx.teacher[x.teacher_id])), l.notes || ''].join(' '),
+      columns: [
+        { label: t('المبحث'), get: l => { const subj = ctx.subject[l.subject_id];
+          return [h('span', { class: 'swatch', style: { background: subj?.color || '#dbe7f7' } }), ' ', nameOf(subj)]; } },
+        { label: t('الشعب / المجموعات'), get: l => l.targets.map(tg => h('span', { class: 'chip' }, ctx.targetLabel(tg))) },
+        { label: t('المعلمون'), get: l => l.teachers.map(x => h('span', { class: 'chip' }, nameOf(ctx.teacher[x.teacher_id]))) },
+        { label: t('الحصص أسبوعياً'), cls: 'num', get: l => l.periods_per_week },
+        { label: t('المدة'), get: l => (l.duration === 1 ? t('مفردة') : l.duration === 2 ? t('مزدوجة') : l.duration) },
+        { label: t('المُدرَج في الجدول'), get: l => {
+          const total = l.cards.reduce((a, c) => a + c.duration, 0);
+          const placed = l.cards.filter(c => c.weekday_id).reduce((a, c) => a + c.duration, 0);
+          return h('span', { class: placed < total ? 'muted' : '' }, `${placed} / ${total}`); } },
+      ],
+      actions: l => (editable ? [h('button', { class: 'btn small ghost', onclick: () => edit(l) }, t('تعديل')), ' ',
+                                 h('button', { class: 'btn small ghost', onclick: () => remove(l) }, t('حذف'))] : null),
+      onBulkDelete: editable ? async items => {
+        let n = 0;
+        try { for (const l of items) { await api.del(`/api/lessons/${l.id}`, l.version); n++; } }
+        finally { toast(`${t('تم الحذف')}: ${n}`, 'ok'); await reload(); }
+      } : null,
+      emptyText: t('لا توجد دروس مطابقة'),
     });
-    swap(host, rows.length
-      ? h('table', { class: 'data' }, h('thead', {}, h('tr', {},
-          [t('المبحث'), t('الشعب / المجموعات'), t('المعلمون'), t('الحصص أسبوعياً'), t('المدة'), t('المُدرَج في الجدول'), ''].map(x => h('th', {}, x)))),
-          h('tbody', {}, rows))
-      : h('p', { class: 'muted' }, t('لا توجد دروس مطابقة')));
-    drawLoads();
+    table.setQuery(query);
+    swap(host, table.el);
+    loadsDone = drawLoads();
   }
 
-  function drawLoads() {
+  const noticeHost = h('div');
+  async function drawLoads() {
+    let status = null;
+    try { status = await api.get(`/api/timetables/${ctx.tt.id}/load-status`); } catch (_) { /* offline: plain counts */ }
+    const byT = Object.fromEntries((status?.teachers || []).map(r => [r.teacher_id, r]));
     const load = {};
     for (const l of ctx.lessons) for (const x of l.teachers) load[x.teacher_id] = (load[x.teacher_id] || 0) + l.periods_per_week;
-    const rows = [...ctx.teachers].filter(x => load[x.id] || x.target_weekly_periods)
+    const rows = [...ctx.teachers].filter(x => load[x.id] || x.target_weekly_periods || byT[x.id])
       .sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'ar')).map(x => {
-        const n = load[x.id] || 0, target = x.target_weekly_periods;
-        const cls = target == null ? '' : n > target ? 'reasons' : n < target ? 'muted' : '';
-        return h('tr', {}, h('td', {}, nameOf(x)), h('td', { class: cls }, n), h('td', {}, target ?? '—'));
+        const r = byT[x.id];
+        return h('tr', {}, h('td', {}, nameOf(x)), h('td', { class: 'num' }, load[x.id] || 0),
+          h('td', { class: 'num' }, r ? (r.expected || '—') : (x.target_weekly_periods ?? '—')), h('td', {}, r ? statusBadge(r) : '—'));
       });
     swap(loadHost, rows.length ? h('details', {}, h('summary', {}, t('ملخص نصاب المعلمين')),
-      h('table', { class: 'data', style: { marginTop: '8px', maxWidth: '520px' } },
-        h('thead', {}, h('tr', {}, [t('المعلم'), t('المُسنَد'), t('النصاب')].map(x => h('th', {}, x)))), h('tbody', {}, rows))) : '');
+      h('table', { class: 'data', style: { marginTop: '8px', maxWidth: '640px' } },
+        h('thead', {}, h('tr', {}, [t('المعلم'), t('المُسنَد'), t('النصاب المطلوب'), t('الحالة')].map(x => h('th', {}, x)))), h('tbody', {}, rows)),
+      h('p', {}, h('a', { href: '#/loads' }, t('قواعد النصاب الأسبوعي')))) : '');
+    swap(noticeHost, await loadNotice(ctx.tt));
   }
 
   const setF = (k, v) => { f[k] = v || undefined; sessionStorage.setItem('lessons:filter', JSON.stringify(f)); draw(); };
@@ -123,10 +141,12 @@ export async function render(root) {
     ctx.readOnly ? h('p', { class: 'reasons' }, t('هذا الجدول مؤرشف وللقراءة فقط')) : null,
     h('div', { class: 'toolbar sticky' },
       canEdit() && !ctx.readOnly ? h('button', { class: 'btn', onclick: add }, `+ ${t('درس جديد')}`) : null,
+      searchBox(v => { query = v; table && table.setQuery(v); }, t('ابحث بالمبحث أو المعلم أو الشعبة…')),
       sel('stage', t('المرحلة'), ctx.stages.map(s => ({ value: s.id, label: nameOf(s) }))),
       sel('section', t('الشعبة'), ctx.sortedSections().map(s => ({ value: s.id, label: ctx.sectionLabel(s.id) }))),
       sel('teacher', t('المعلم'), ctx.teachers.map(x => ({ value: x.id, label: nameOf(x) }))),
       sel('subject', t('المبحث'), ctx.subjects.map(x => ({ value: x.id, label: nameOf(x) })))),
-    loadHost, host);
+    noticeHost, loadHost, host);
   draw();
+  await loadsDone;   // the page has its full height before the scroll position is restored
 }

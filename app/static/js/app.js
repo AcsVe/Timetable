@@ -9,6 +9,9 @@ const ROUTES = {
   lessons: () => import('./views/lessons.js'),
   validate: () => import('./views/validate.js'),
   reports: () => import('./views/reports.js'),
+  loads: () => import('./views/loads.js'),
+  exams: () => import('./views/exams.js'),
+  duties: () => import('./views/duties.js'),
   timetables: () => import('./views/timetables.js'),
   bells: () => import('./views/bells.js'),
   availability: () => import('./views/availability.js'),
@@ -141,7 +144,7 @@ async function boot() {
     state.school = school || null;
     if (school) {
       document.getElementById('school-name').textContent = lang === 'en' && school.name_en ? school.name_en : school.name_ar;
-      if (school.logo_path) { const img = document.getElementById('school-logo'); img.src = school.logo_path; img.hidden = false; }
+      if (school.logo_path) { const img = document.getElementById('school-logo'); img.src = school.logo_path; img.alt = `${t('شعار')} ${school.name_ar}`; img.hidden = false; }
     }
   } catch (_) { /* optional */ }
 

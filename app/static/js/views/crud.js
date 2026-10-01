@@ -2,7 +2,7 @@
 import * as api from '../api.js';
 import { t } from '../i18n.js';
 import { byId, canEdit, currentTimetable, invalidate, isAdmin, list } from '../store.js';
-import { confirmBox, h, nameOf, openForm, toast, toastError, put, swap } from '../ui.js';
+import { bulkTable, confirmBox, h, nameOf, openForm, searchBox, toast, toastError, put, swap } from '../ui.js';
 
 const DOW = [[7, 'الأحد'], [1, 'الاثنين'], [2, 'الثلاثاء'], [3, 'الأربعاء'], [4, 'الخميس'], [5, 'الجمعة'], [6, 'السبت']];
 
@@ -188,23 +188,35 @@ export async function render(root, [res]) {
   let filterValue = sessionStorage.getItem(`filter:${res}`) || '';
 
   const tableHost = h('div');
+  let query = '';
+  let table = null;
+  const textOf = (item, extra) => [...columns.map(c => {
+    const v = fmt(fieldMap[c], item[c]);
+    return v instanceof Node ? v.textContent : Array.isArray(v) ? v.map(x => x.textContent).join(' ') : v;
+  }), item.name_en || '', item.short || ''].join(' ');
   async function draw() {
     const [items, extra] = await Promise.all([
       list(res, filterValue && filterField ? `?${cfg.filter}=${filterValue}` : ''),
       cfg.extraColumns ? cfg.extraColumns().catch(() => []) : []]);
-    const rows = items.map(item => h('tr', { dataset: { id: item.id } },
-      columns.map(c => h('td', {}, fmt(fieldMap[c], item[c]))),
-      extra.map(x => h('td', {}, x.get(item))),
-      h('td', { class: 'row-actions' },
+    table = bulkTable({
+      items, text: textOf,
+      columns: [...columns.map(c => ({ label: fieldMap[c].label, get: x => fmt(fieldMap[c], x[c]) })),
+                ...extra.map(x => ({ label: x.label, get: x.get }))],
+      actions: item => [
         (cfg.actions || []).map(a => [h('button', { class: 'btn small ghost', onclick: () => a.go(item) }, t(a.label)), ' ']),
         canEdit() ? [
           h('button', { class: 'btn small ghost', onclick: () => edit(item) }, t('تعديل')), ' ',
-          h('button', { class: 'btn small ghost', onclick: () => remove(item) }, t('حذف'))] : null)));
-    swap(tableHost, items.length
-      ? h('div', { class: 'grid-scroll' }, h('table', { class: 'data' }, h('thead', {}, h('tr', {}, columns.map(c => h('th', {}, fieldMap[c].label)),
-          extra.map(x => h('th', {}, x.label)), h('th'))),
-          h('tbody', {}, rows)))
-      : h('p', { class: 'muted' }, t('لا توجد سجلات بعد')));
+          h('button', { class: 'btn small ghost', onclick: () => remove(item) }, t('حذف'))] : null],
+      onBulkDelete: canEdit() ? bulkRemove : null,
+    });
+    table.setQuery(query);
+    swap(tableHost, table.el);
+  }
+  async function bulkRemove(items) {
+    const r = await api.post(`/api/${res}/bulk-delete`, { items: items.map(x => ({ id: x.id, version: x.version })) });
+    invalidate(res);
+    toast(`${t('تم الحذف')}: ${r.count}`, 'ok');
+    await draw();
   }
 
   async function save(values, item) {
@@ -235,6 +247,7 @@ export async function render(root, [res]) {
 
   const toolbar = h('div', { class: 'toolbar sticky' },
     canEdit() ? h('button', { class: 'btn', onclick: add }, `+ ${t('إضافة')}`) : null,
+    searchBox(v => { query = v; if (table) table.setQuery(v); }, t('ابحث بالاسم أو بأي حقل…')),
     filterField ? h('label', { class: 'inline' }, `${filterField.label}:`,
       h('select', { onchange: e => { filterValue = e.target.value; sessionStorage.setItem(`filter:${res}`, filterValue); draw(); } },
         h('option', { value: '' }, t('الكل')),

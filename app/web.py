@@ -4,7 +4,7 @@ from flask_login import login_required
 web_bp = Blueprint("web", __name__)
 
 # Bump when static assets change so the service worker refreshes its cache.
-ASSET_VERSION = "2026.10.01-2"
+ASSET_VERSION = "2026.10.02-1"
 
 
 @web_bp.get("/")

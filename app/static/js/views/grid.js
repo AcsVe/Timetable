@@ -6,11 +6,44 @@
 // (every section or every teacher in rows, days × periods in columns — like ASC's main screen).
 import * as api from '../api.js';
 import { t } from '../i18n.js';
-import { canEdit } from '../store.js';
+import { canEdit, invalidate } from '../store.js';
 import { h, nameOf, put, swap, toast, toastError } from '../ui.js';
 import { loadContext, noTimetable } from './ctx.js';
+import { loadNotice } from './loads.js';
 
 const WHOLE = new Set(['whole-sections', 'whole-teachers']);
+
+// ---------------------------------------------------------------- colours
+// Distinct, readable pastel colours (golden-angle hues) and shades of one colour for a subject's teachers.
+const hsl = (hue, s, l) => {
+  s /= 100; l /= 100;
+  const k = n => (n + hue / 30) % 12, a = s * Math.min(l, 1 - l);
+  const f = n => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))));
+  return `#${[f(0), f(8), f(4)].map(x => x.toString(16).padStart(2, '0')).join('')}`;
+};
+export const distinctColor = i => hsl((i * 137.508) % 360, 62 + (i % 3) * 8, 76 - (i % 2) * 8);
+const hexToHsl = hex => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return null;
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+  const s = d ? d / (1 - Math.abs(2 * l - 1)) : 0;
+  let hh = 0;
+  if (d) hh = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [(hh * 60 + 360) % 360, s * 100, l * 100];
+};
+const shade = (hex, i, n) => {
+  const x = hexToHsl(hex);
+  if (!x) return hex;
+  const steps = Math.max(n, 1);
+  return hsl(x[0], Math.max(45, x[1]), 58 + (30 * (i % steps)) / Math.max(steps - 1, 1));
+};
+export const inkFor = hex => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return '#1d2330';
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16));
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#1d2330' : '#ffffff';
+};
 
 export async function render(root) {
   let ctx = await loadContext();
@@ -20,11 +53,15 @@ export async function render(root) {
   let entityId = saved.entityId || '';
   let orient = saved.orient || 'rows';        // rows: days are rows (ASC print / SCL style); cols: days are columns
   let stageId = saved.stageId || '';          // whole-school filter
+  let colorBy = saved.colorBy || 'subject';   // subject | teacher | subject-teachers | none
+  let showPalette = false;
   let picked = null;                          // card currently being dragged / selected
   let allowed = null;                         // Map "dayId|period" -> {ok, messages}
   const editable = canEdit() && !ctx.readOnly;
   const gridHost = h('div', { class: 'grid-wrap' });
   const info = h('div', { class: 'legend' });
+  const noticeHost = h('div');
+  const noticeP = loadNotice(ctx.tt);
   const isWhole = () => WHOLE.has(mode);
 
   // ------------------------------------------------------------------ data helpers
@@ -70,9 +107,10 @@ export async function render(root) {
     const room = card.room_id ? nameOf(ctx.room[card.room_id]) : '';
     const full = [nameOf(subj), bySection ? groups.join('، ') : '', l.targets.map(x => ctx.targetLabel(x)).join('، '),
                   l.teachers.map(x => nameOf(ctx.teacher[x.teacher_id])).join('، '), room].filter(Boolean);
+    const bg = chipColor(l);
     const el = h('div', {
-      class: `card-chip${mini ? ' mini' : ''}${card.duration > 1 && !continuation && !mini ? ' double' : ''}`,
-      style: { background: subj?.color || '#dbe7f7', opacity: continuation ? '.55' : null },
+      class: `card-chip${mini ? ' mini' : ''}${card.duration > 1 && !continuation && !mini ? ' double' : ''}${colorBy === 'none' ? ' plain' : ''}`,
+      style: { background: bg, color: inkFor(bg), opacity: continuation ? '.55' : null },
       draggable: editable && !card.is_locked && !continuation ? 'true' : null,
       dataset: { card: card.id }, title: [...new Set(full)].join('\n'),
     },
@@ -90,6 +128,24 @@ export async function render(root) {
       el.addEventListener('click', e => { e.stopPropagation(); (picked && picked.id === card.id ? unpick() : pick(card, el)); });
     }
     return el;
+  }
+
+  // ------------------------------------------------------------------ colours
+  const subjectIndex = id => ctx.subjects.findIndex(x => x.id === id);
+  const teacherIndex = id => ctx.teachers.findIndex(x => x.id === id);
+  const subjectColor = id => ctx.subject[id]?.color || distinctColor(Math.max(0, subjectIndex(id)));
+  const teacherColor = id => ctx.teacher[id]?.color || distinctColor(Math.max(0, teacherIndex(id)) + 7);
+  const subjectTeachers = sid => [...new Set(ctx.lessons.filter(l => l.subject_id === sid).flatMap(l => l.teachers.map(x => x.teacher_id)))]
+    .sort((a, b) => nameOf(ctx.teacher[a]).localeCompare(nameOf(ctx.teacher[b]), 'ar'));
+  function chipColor(l) {
+    const tid = l.teachers[0]?.teacher_id;
+    if (colorBy === 'none') return '#ffffff';
+    if (colorBy === 'teacher') return tid ? teacherColor(tid) : '#dbe7f7';
+    if (colorBy === 'subject-teachers') {
+      const list = subjectTeachers(l.subject_id);
+      return shade(subjectColor(l.subject_id), Math.max(0, list.indexOf(tid)), list.length);
+    }
+    return subjectColor(l.subject_id);
   }
 
   async function pick(card, el) {
@@ -203,11 +259,59 @@ export async function render(root) {
   }
 
   function legend(cards) {
-    const ids = [...new Set(cards.map(c => c.lesson.subject_id))];
-    return ids.length ? h('div', { class: 'subject-legend' }, ids.map(id => ctx.subject[id]).filter(Boolean)
-      .sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'ar'))
-      .map(s => h('span', { class: 'legend-item' }, h('span', { class: 'swatch', style: { background: s.color || '#dbe7f7' } }),
-        s.short_ar ? `${s.short_ar} — ${nameOf(s)}` : nameOf(s)))) : null;
+    if (colorBy === 'none') return null;
+    if (colorBy === 'teacher') {
+      const ids = [...new Set(cards.flatMap(c => c.lesson.teachers.map(x => x.teacher_id)))].filter(id => ctx.teacher[id])
+        .sort((a, b) => nameOf(ctx.teacher[a]).localeCompare(nameOf(ctx.teacher[b]), 'ar'));
+      return ids.length ? h('div', { class: 'subject-legend' }, ids.map(id => h('span', { class: 'legend-item' },
+        h('span', { class: 'swatch', style: { background: teacherColor(id) } }), nameOf(ctx.teacher[id])))) : null;
+    }
+    const ids = [...new Set(cards.map(c => c.lesson.subject_id))].filter(id => ctx.subject[id])
+      .sort((a, b) => nameOf(ctx.subject[a]).localeCompare(nameOf(ctx.subject[b]), 'ar'));
+    return ids.length ? h('div', { class: 'subject-legend' }, ids.map(id => {
+      const s = ctx.subject[id];
+      const head = h('span', { class: 'legend-item' }, h('span', { class: 'swatch', style: { background: subjectColor(id) } }),
+        s.short_ar ? `${s.short_ar} — ${nameOf(s)}` : nameOf(s));
+      if (colorBy !== 'subject-teachers') return head;
+      const list = subjectTeachers(id);
+      return h('span', { class: 'legend-group' }, head, list.map((tid, i) => h('span', { class: 'legend-item sub' },
+        h('span', { class: 'swatch', style: { background: shade(subjectColor(id), i, list.length) } }), nameOf(ctx.teacher[tid]))));
+    })) : null;
+  }
+
+  // Palette: change a subject's or teacher's colour here, or give everything distinct colours in one go.
+  function palette(cards) {
+    if (!showPalette) return null;
+    const byTeacher = colorBy === 'teacher';
+    const ids = byTeacher
+      ? [...new Set(cards.flatMap(c => c.lesson.teachers.map(x => x.teacher_id)))].filter(id => ctx.teacher[id])
+      : [...new Set(cards.map(c => c.lesson.subject_id))].filter(id => ctx.subject[id]);
+    const res = byTeacher ? 'teachers' : 'subjects';
+    const obj = id => (byTeacher ? ctx.teacher[id] : ctx.subject[id]);
+    const colorOf = id => (byTeacher ? teacherColor(id) : subjectColor(id));
+    async function setColor(id, color) {
+      const o = obj(id);
+      const r = await api.patch(`/api/${res}/${id}`, { version: o.version, color });
+      Object.assign(o, r);
+    }
+    async function setMany(pairs) {
+      try {
+        for (const [id, color] of pairs) await setColor(id, color);
+        invalidate(res); ctx = await loadContext(); draw();
+        toast(t('تم حفظ الألوان'), 'ok');
+      } catch (e) { toastError(e); }
+    }
+    const all = (byTeacher ? ctx.teachers : ctx.subjects).map(x => x.id);
+    return h('div', { class: 'palette no-print' },
+      h('div', { class: 'toolbar' }, h('b', {}, byTeacher ? t('ألوان المعلمين') : t('ألوان المباحث')),
+        editable ? h('button', { type: 'button', class: 'btn small ghost', onclick: () => setMany(all.map((id, i) => [id, distinctColor(i + (byTeacher ? 7 : 0))])) },
+          t('ألوان متباينة تلقائياً للجميع')) : null,
+        h('span', { class: 'muted small' }, colorBy === 'subject-teachers' ? t('في عرض «المبحث ومعلموه» يأخذ كل معلم درجة من لون مبحثه.') : '')),
+      h('div', { class: 'palette-items' }, ids.sort((a, b) => nameOf(obj(a)).localeCompare(nameOf(obj(b)), 'ar')).map(id =>
+        h('label', { class: 'palette-item' },
+          h('input', { type: 'color', value: colorOf(id), disabled: !editable, 'aria-label': `${t('اللون')} — ${nameOf(obj(id))}`,
+                       onchange: e => setMany([[id, e.target.value]]) }),
+          nameOf(obj(id))))));
   }
 
   function draw() {
@@ -233,7 +337,7 @@ export async function render(root) {
     }
     const total = cards.reduce((a, c) => a + c.duration, 0);
     const placed = cards.filter(c => c.weekday_id).reduce((a, c) => a + c.duration, 0);
-    swap(gridHost, h('div', { class: 'grid-scroll' }, table,
+    swap(gridHost, h('div', { class: 'grid-scroll' }, palette(cards), table,
       h('p', { class: 'legend' }, `${t('المُدرَج')}: ${placed} / ${total} · ${t('اسحب الحصة، أو انقر عليها ثم انقر على الخانة المطلوبة. الخانات الخضراء متاحة، والحمراء فيها تعارض (مرِّر المؤشر فوقها لمعرفة السبب).')}`),
       legend(cards)),
       tray);
@@ -241,11 +345,16 @@ export async function render(root) {
   }
 
   // ------------------------------------------------------------------ toolbar
-  const persist = () => sessionStorage.setItem('grid:view', JSON.stringify({ mode, entityId, orient, stageId }));
-  const entitySel = h('select', { id: 'grid-entity', onchange: e => { entityId = e.target.value; persist(); draw(); } });
-  const stageSel = h('select', { id: 'grid-stage', onchange: e => { stageId = e.target.value; persist(); draw(); } },
+  const persist = () => sessionStorage.setItem('grid:view', JSON.stringify({ mode, entityId, orient, stageId, colorBy }));
+  const colorSel = h('select', { id: 'grid-color', 'aria-label': t('التلوين'), onchange: e => { colorBy = e.target.value; persist(); draw(); } },
+    [['subject', t('لون لكل مبحث')], ['teacher', t('لون لكل معلم')], ['subject-teachers', t('المبحث ومعلموه (درجات اللون)')], ['none', t('بلا ألوان')]]
+      .map(([v, l]) => h('option', { value: v, selected: v === colorBy }, l)));
+  const paletteBtn = h('button', { class: 'btn ghost', type: 'button', id: 'grid-palette', 'aria-pressed': 'false',
+    onclick: () => { showPalette = !showPalette; paletteBtn.setAttribute('aria-pressed', String(showPalette)); draw(); } }, t('تعديل الألوان'));
+  const entitySel = h('select', { id: 'grid-entity', 'aria-label': t('اختر من القائمة'), onchange: e => { entityId = e.target.value; persist(); draw(); } });
+  const stageSel = h('select', { id: 'grid-stage', 'aria-label': t('المرحلة'), onchange: e => { stageId = e.target.value; persist(); draw(); } },
     h('option', { value: '' }, t('جميع المراحل')), ctx.stages.map(s => h('option', { value: s.id, selected: s.id === stageId }, nameOf(s))));
-  const orientSel = h('select', { id: 'grid-orient', onchange: e => { orient = e.target.value; persist(); draw(); } },
+  const orientSel = h('select', { id: 'grid-orient', 'aria-label': t('اتجاه الجدول'), onchange: e => { orient = e.target.value; persist(); draw(); } },
     [['rows', t('الأيام صفوفاً')], ['cols', t('الأيام أعمدةً')]].map(([v, l]) => h('option', { value: v, selected: v === orient }, l)));
   function syncControls() {
     entitySel.hidden = isWhole();
@@ -258,7 +367,7 @@ export async function render(root) {
     if (!opts.some(o => o.value === entityId)) entityId = opts[0]?.value || '';
     entitySel.replaceChildren(...opts.map(o => h('option', { value: o.value, selected: o.value === entityId }, o.label)));
   }
-  const modeSel = h('select', { id: 'grid-mode', onchange: e => { mode = e.target.value; entityId = ''; fillEntities(); syncControls(); persist(); draw(); } },
+  const modeSel = h('select', { id: 'grid-mode', 'aria-label': t('طريقة العرض'), onchange: e => { mode = e.target.value; entityId = ''; fillEntities(); syncControls(); persist(); draw(); } },
     [['section', t('حسب الشعبة')], ['teacher', t('حسب المعلم')], ['room', t('حسب القاعة')],
      ['whole-sections', t('الجدول الكامل — الشعب')], ['whole-teachers', t('الجدول الكامل — المعلمون')]]
       .map(([v, l]) => h('option', { value: v, selected: v === mode }, l)));
@@ -278,11 +387,12 @@ export async function render(root) {
 
   put(root, h('h1', { class: 'title' }, `${t('شبكة الجدول')} — ${ctx.tt.name}`),
     ctx.readOnly ? h('p', { class: 'reasons' }, t('هذا الجدول مؤرشف وللقراءة فقط')) : null,
-    h('div', { class: 'toolbar sticky' }, modeSel, entitySel, stageSel, orientSel,
+    h('div', { class: 'toolbar sticky' }, modeSel, entitySel, stageSel, orientSel, colorSel, paletteBtn,
       h('button', { class: 'btn', id: 'grid-print', type: 'button', onclick: printPdf }, t('طباعة PDF')),
       h('a', { class: 'btn ghost', href: '#/lessons' }, t('الدروس والتوزيع')),
       h('a', { class: 'btn ghost', href: '#/validate' }, t('التحقق'))),
-    info, gridHost);
+    info, gridHost, noticeHost);
+  swap(noticeHost, await noticeP);
   if (!window.__gridEsc) {
     window.__gridEsc = true;
     document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.card-chip.dragging').forEach(x => x.click()); });
