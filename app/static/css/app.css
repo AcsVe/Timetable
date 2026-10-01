@@ -177,6 +177,12 @@ dialog::backdrop { background: rgba(16,24,40,.45); }
 .dropzone.over { background: #dbe6f5; }
 .drop-name { font-weight: 700; color: var(--ink); word-break: break-all; }
 .btn.big { padding: 10px 26px; font-size: 1.05rem; }
+.replace-box { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; padding: 10px 12px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: var(--radius); }
+.replace-box > span { display: flex; flex-direction: column; gap: 2px; }
+.replace-box input { margin-top: 4px; width: 18px; height: 18px; }
+.replace-box.on { border-color: var(--err); background: #fdecec; }
+.replace-box.on strong { color: var(--err); }
 details.more { margin-top: 14px; }
 details.more summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .small { font-size: .88rem; }
@@ -196,6 +202,8 @@ fieldset.plain legend { font-weight: 600; margin-bottom: 4px; }
 .report-block h3 { margin: 6px 0; color: var(--accent); }
 .report-grid th, .report-grid td { text-align: center; font-size: .85rem; }
 .report-grid td.none { background: #f2f4f7; }
+.report-grid .entry div { font-size: .78em; color: var(--muted); }
+.report-grid .dayname .ptime, .report-grid thead .ptime { display: block; font-weight: 400; font-size: .75em; }
 .report-grid .entry + .entry { border-top: 1px dashed var(--line); margin-top: 3px; padding-top: 3px; }
 .report-grid .ptime { display: block; font-weight: 400; font-size: .72rem; }
 .report-grid.days-rows td { height: 64px; min-width: 90px; }

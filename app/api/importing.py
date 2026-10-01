@@ -15,11 +15,18 @@ MAX_FILE = 20_000_000
 KINDS = {"teachers", "subjects", "rooms", "sections", "lessons"}
 
 
-def _bundle():
-    f = request.files.get("file")
-    if f is None or not f.filename:
+def _bundles():
+    files = [f for f in request.files.getlist("file") if f and f.filename]
+    if not files:
         raise ApiError("validation", 400, details={"field": "file", "reason": "required"},
                        message="اختر ملفاً للاستيراد", message_en="Choose a file to import")
+    if len(files) > 5:
+        raise ApiError("validation", 400, details={"field": "file", "reason": "too_many_files"},
+                       message="يمكن استيراد خمسة ملفات على الأكثر دفعةً واحدة", message_en="At most five files at once")
+    return [_bundle(f) for f in files]
+
+
+def _bundle(f):
     data = f.read(MAX_FILE + 1)
     if len(data) > MAX_FILE:
         raise ApiError("validation", 413, details={"reason": "file_too_large"},
@@ -47,7 +54,8 @@ def _bundle():
 def _options() -> dict:
     form = request.form
     opt = lambda k: (form.get(k) or "").strip() or None  # noqa: E731
-    out = {"stage_name": opt("stage_name"), "new_timetable_name": opt("new_timetable_name")}
+    out = {"stage_name": opt("stage_name"), "new_timetable_name": opt("new_timetable_name"),
+           "replace_all": form.get("replace_all") in ("1", "true", "on")}
     for k in ("stage_id", "timetable_id", "term_id"):
         out[k] = parse_uuid(opt(k), k) if opt(k) else None
     return out
@@ -56,8 +64,7 @@ def _options() -> dict:
 def _run():
     require_admin(current_user)
     from app.importing.apply import run_import
-    bundle = _bundle()
-    return run_import(bundle, **_options())
+    return run_import(_bundles(), **_options())
 
 
 @api_bp.get("/import/template.xlsx")

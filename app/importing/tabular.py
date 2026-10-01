@@ -14,7 +14,7 @@ from app.errors import ApiError
 from app.importing.bundle import Bundle
 from app.importing.text import clean, gender, header_key, norm, split_list, to_int
 
-KIND_LABEL = {"teachers": ("المعلمون", "Teachers"), "subjects": ("المباحث", "Subjects"),
+KIND_LABEL = {"bells": ("التوقيت", "Bell times"), "teachers": ("المعلمون", "Teachers"), "subjects": ("المباحث", "Subjects"),
               "rooms": ("القاعات", "Rooms"), "sections": ("الشعب", "Sections"), "lessons": ("الدروس", "Lessons")}
 
 SHEET_NAMES = {
@@ -23,6 +23,7 @@ SHEET_NAMES = {
     "rooms": ["القاعات", "الغرف", "قاعات", "rooms", "classrooms"],
     "sections": ["الشعب", "الصفوف والشعب", "شعب", "sections", "classes"],
     "lessons": ["الدروس", "الحصص", "التوزيع", "توزيع الحصص", "الإسناد", "lessons", "allocation", "cards"],
+    "bells": ["التوقيت", "توقيت الحصص", "أوقات الحصص", "الجرس", "bells", "bell times", "periods"],
 }
 
 FIELDS: dict[str, dict[str, list[str]]] = {
@@ -75,16 +76,24 @@ FIELDS: dict[str, dict[str, list[str]]] = {
         "room": ["القاعة المفضلة", "القاعة", "room", "preferred room"],
         "notes": ["ملاحظات", "notes"],
     },
+    "bells": {
+        "template": ["القالب", "اسم القالب", "قالب التوقيت", "template", "schedule"],
+        "days": ["الأيام", "اليوم", "days", "day"],
+        "grades": ["الصفوف", "الصف", "grades", "grade"],
+        "period": ["الحصة", "رقم الحصة", "period"],
+        "start": ["من", "البداية", "بداية", "start", "from"],
+        "end": ["إلى", "الى", "النهاية", "نهاية", "end", "to"],
+    },
 }
 _ALIASES = {kind: {header_key(a): f for f, al in fs.items() for a in al} for kind, fs in FIELDS.items()}
 _SHEETS = {header_key(n): k for k, ns in SHEET_NAMES.items() for n in ns}
-REQUIRED = {"teachers": {"name"}, "subjects": {"name"}, "rooms": {"name"}, "sections": {"grade", "name"},
+REQUIRED = {"bells": {"template", "period", "start", "end"}, "teachers": {"name"}, "subjects": {"name"}, "rooms": {"name"}, "sections": {"grade", "name"},
             "lessons": {"subject", "sections", "ppw"}}
 
 
 def _find_header(rows: list[list], kind: str | None):
     """(row index, kind, {col: field}) of the first row that looks like a heading row."""
-    kinds = [kind] if kind else ["lessons", "sections", "teachers", "subjects", "rooms"]
+    kinds = [kind] if kind else ["bells", "lessons", "sections", "teachers", "subjects", "rooms"]
     best = None
     for i, row in enumerate(rows[:10]):
         keys = [header_key(c) for c in row]
@@ -196,7 +205,33 @@ def _add_lesson(b, rec, where, n):
                       "room": _opt(rec, "room"), "notes": _opt(rec, "notes")})
 
 
-_ADD = {"teachers": _add_teacher, "subjects": _add_subject, "rooms": _add_room, "sections": _add_section,
+BREAK_WORDS = {"استراحه", "الاستراحه", "فرصه", "الفرصه", "فسحه", "الفسحه", "break", "recess", "استراحة"}
+
+
+def _add_bell(b, rec, where, n):
+    from app.importing.text import time_text
+    name = clean(rec.get("template"))
+    if not name:
+        return b.error("اسم القالب فارغ", "Template name is empty", where, n)
+    p = clean(rec.get("period"))
+    kind, no = ("break", None) if norm(p) in {norm(w) for w in BREAK_WORDS} else ("lesson", to_int(p))
+    if kind == "lesson" and (no is None or not 1 <= no <= 20):
+        raise ValueError(p)
+    start, end = time_text(rec.get("start")), time_text(rec.get("end"))
+    if not start or not end:
+        return b.error("وقت البداية والنهاية مطلوبان", "Start and end times are required", where, n)
+    tpl = next((x for x in b.bells if norm(x["template"]) == norm(name)), None)
+    if tpl is None:
+        tpl = {"template": name, "days": [], "grades": [], "slots": [], "where": where, "row": n}
+        b.bells.append(tpl)
+    for k in ("days", "grades"):
+        for v in split_list(rec.get(k)):
+            if v not in tpl[k]:
+                tpl[k].append(v)
+    tpl["slots"].append({"kind": kind, "no": no, "start": start, "end": end, "row": n, "where": where})
+
+
+_ADD = {"bells": _add_bell, "teachers": _add_teacher, "subjects": _add_subject, "rooms": _add_room, "sections": _add_section,
         "lessons": _add_lesson}
 
 
@@ -209,7 +244,7 @@ def parse_xlsx(data: bytes, kind: str | None = None) -> Bundle:
                        message="تعذّر فتح ملف Excel؛ احفظه بصيغة ‎.xlsx وأعد المحاولة",
                        message_en="Could not open the Excel file; save it as .xlsx and try again")
     b = Bundle(source="xlsx")
-    order = ["subjects", "rooms", "teachers", "sections", "lessons"]
+    order = ["subjects", "rooms", "teachers", "sections", "lessons", "bells"]
     sheets = []
     for ws in wb.worksheets:
         if ws.sheet_state != "visible" or header_key(ws.title) in {header_key("تعليمات"), "instructions"}:

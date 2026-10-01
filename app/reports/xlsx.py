@@ -59,8 +59,27 @@ def _header(ws, rep: Report, sub_title: str, width_cols: int, logo: bytes | None
     ws.print_title_rows = f"{HEADER_ROWS + 1}:{HEADER_ROWS + 1}"
 
 
+def _rich_cell(entries):
+    """Subject in bold, teacher/room under it in a smaller grey font (Excel rich text)."""
+    from openpyxl.cell.rich_text import CellRichText, TextBlock
+    from openpyxl.cell.text import InlineFont
+    bold = InlineFont(rFont="Arial", b=True, sz=10)
+    small = InlineFont(rFont="Arial", sz=8, color="555555")
+    parts = []
+    for e in entries:
+        lines = [x for x in e if x]
+        if not lines:
+            continue
+        if parts:
+            parts.append(TextBlock(small, "\n"))
+        parts.append(TextBlock(bold, lines[0]))
+        for x in lines[1:]:
+            parts.append(TextBlock(small, "\n" + x))
+    return CellRichText(*parts) if parts else None
+
+
 def _write_grid(ws, rep: Report, g: Grid, logo):
-    corner, heads, rows = grid_matrix(g, rep.layout, rep.rtl)
+    corner, heads, rows = grid_matrix(g, rep.layout, rep.rtl, raw=True)
     _header(ws, rep, g.title + (f" — {g.subtitle}" if g.subtitle else ""), len(heads) + 1, logo)
     r0 = HEADER_ROWS + 1
     for j, text in enumerate([corner] + heads, start=1):
@@ -78,10 +97,10 @@ def _write_grid(ws, rep: Report, g: Grid, logo):
             if miss:
                 cell.fill = MISSING_FILL
                 continue
-            cell.value = text
             cell.font = Font(name="Arial", size=9)
             if text:
-                max_lines = max(max_lines, text.count("\n") + 1)
+                cell.value = _rich_cell(text)
+                max_lines = max(max_lines, sum(len([x for x in e if x]) for e in text))
         ws.row_dimensions[row].height = 15 * max_lines
     ws.column_dimensions["A"].width = max(ws.column_dimensions["A"].width or 0, 13)
     for j in range(len(heads)):

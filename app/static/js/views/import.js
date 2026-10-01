@@ -3,12 +3,12 @@ import * as api from '../api.js';
 import { loadTimetables } from '../app.js';
 import { lang, t } from '../i18n.js';
 import { currentTimetable, invalidate, list, state } from '../store.js';
-import { h, jumpTo, nameOf, pageNav, put, swap, toast, toastError } from '../ui.js';
+import { confirmBox, h, jumpTo, nameOf, pageNav, put, swap, toast, toastError } from '../ui.js';
 
 const ENTITIES = [
   ['stages', 'المراحل'], ['grades', 'الصفوف'], ['sections', 'الشعب'], ['divisions', 'التقسيمات'],
   ['groups', 'المجموعات'], ['subjects', 'المباحث'], ['teachers', 'المعلمون'], ['rooms', 'القاعات'],
-  ['bell_schedules', 'قوالب التوقيت'], ['lessons', 'الدروس'],
+  ['bell_schedules', 'قوالب التوقيت'], ['bell_assignments', 'إسناد التوقيت للأيام والصفوف'], ['lessons', 'الدروس'],
 ];
 const KINDS = [['', 'تحديد تلقائي من العناوين'], ['teachers', 'المعلمون'], ['subjects', 'المباحث'],
                ['rooms', 'القاعات'], ['sections', 'الشعب'], ['lessons', 'الدروس']];
@@ -17,11 +17,12 @@ const NEW_STAGE = '__new__';
 export async function render(root) {
   const stages = await list('stages');
   const tt = currentTimetable();
-  let file = null;
+  let files = [];
   let key = null;          // one Idempotency-Key per previewed file+options: a double click commits once
   let busy = false;
 
-  const fileInput = h('input', { type: 'file', id: 'import-file', accept: '.xlsx,.xlsm,.csv,.txt,.xml,.roz' });
+  const fileInput = h('input', { type: 'file', id: 'import-file', multiple: true, accept: '.xlsx,.xlsm,.csv,.txt,.xml,.roz' });
+  const replaceAll = h('input', { type: 'checkbox', id: 'import-replace' });
   const fileName = h('span', { class: 'drop-name' }, t('لم يُختر ملف'));
   const kindSel = h('select', { id: 'import-kind' }, KINDS.map(([v, l]) => h('option', { value: v }, t(l))));
   const kindRow = h('label', { class: 'inline', hidden: true }, `${t('محتوى ملف CSV')}:`, kindSel);
@@ -38,18 +39,21 @@ export async function render(root) {
 
   const reset = () => { key = null; swap(result); };
   fileInput.onchange = () => {
-    file = fileInput.files[0] || null;
-    fileName.textContent = file ? file.name : t('لم يُختر ملف');
-    kindRow.hidden = !(file && /\.(csv|txt)$/i.test(file.name));
-    if (file && !ttName.value) ttName.value = `${t('مستورد')}: ${file.name.replace(/\.[^.]+$/, '')}`;
-    previewBtn.disabled = !file;
+    files = [...fileInput.files].slice(0, 5);
+    fileName.textContent = files.length ? files.map(f => f.name).join('، ') : t('لم يُختر ملف');
+    kindRow.hidden = !files.some(f => /\.(csv|txt)$/i.test(f.name));
+    const main = files.find(f => /\.(xml|roz)$/i.test(f.name)) || files[0];
+    if (main && !ttName.value) ttName.value = `${t('مستورد')}: ${main.name.replace(/\.[^.]+$/, '')}`;
+    previewBtn.disabled = !files.length;
     reset();
   };
+  replaceAll.addEventListener('change', () => { replaceBox.classList.toggle('on', replaceAll.checked); reset(); });
   stageSel.onchange = () => { stageName.hidden = stageSel.value !== NEW_STAGE; reset(); };
   for (const el of [kindSel, stageName, ttName, destNew, destCur]) el.addEventListener('change', reset);
 
   function fields() {
     const f = {};
+    if (replaceAll.checked) f.replace_all = '1';
     if (kindSel.value && !kindRow.hidden) f.kind = kindSel.value;
     if (stageSel.value === NEW_STAGE) { if (stageName.value.trim()) f.stage_name = stageName.value.trim(); }
     else if (stageSel.value) f.stage_id = stageSel.value;
@@ -62,23 +66,24 @@ export async function render(root) {
   }
 
   async function preview() {
-    if (!file || busy) return;
+    if (!files.length || busy) return;
     busy = true; previewBtn.disabled = true;
     swap(result, h('p', { class: 'muted' }, t('جارٍ قراءة الملف…')));
     try {
-      const rep = await api.upload('/api/import/preview', file, { fields: fields() });
+      const rep = await api.upload('/api/import/preview', files, { fields: fields() });
       key = api.uuid();
       swap(result, renderReport(rep, false));
       jumpTo('import-summary');
-    } catch (e) { swap(result); toastError(e); } finally { busy = false; previewBtn.disabled = !file; }
+    } catch (e) { swap(result); toastError(e); } finally { busy = false; previewBtn.disabled = !files.length; }
   }
   previewBtn.onclick = preview;
 
   async function commit(btn) {
-    if (!file || busy || !key) return;
+    if (!files.length || busy || !key) return;
+    if (replaceAll.checked && !(await confirmBox(t('سيُحذف كل ما في النظام من بيانات (المعلمون والمباحث والشعب والجداول والتوقيت) ويُستبدل بما في الملف. لا يمكن التراجع. أتريد المتابعة؟')))) return;
     busy = true; btn.disabled = true;
     try {
-      const rep = await api.upload('/api/import/commit', file, { key, fields: fields() });
+      const rep = await api.upload('/api/import/commit', files, { key, fields: fields() });
       invalidate();
       if (rep.timetable) {
         state.ttId = rep.timetable.id;
@@ -114,6 +119,10 @@ export async function render(root) {
     if (rep.error_count) links.push({ id: 'import-errors', label: `${t('أخطاء')} (${rep.error_count})` });
     if (rep.warning_count) links.push({ id: 'import-warnings', label: `${t('تنبيهات')} (${rep.warning_count})` });
 
+    const wipedLine = rep.wiped ? h('p', { class: 'form-error' },
+      `${done ? t('حُذفت البيانات السابقة') : t('ستُحذف البيانات الحالية أولاً')}: `
+      + ENTITIES.filter(([k]) => rep.wiped[k]).map(([k, l]) => `${t(l)} ${rep.wiped[k]}`).concat(
+        rep.wiped.timetables ? [`${t('الجداول')} ${rep.wiped.timetables}`] : []).join('، ')) : null;
     const commitBtn = h('button', { class: 'btn', id: 'import-commit', type: 'button' }, t('تأكيد الاستيراد'));
     commitBtn.onclick = () => commit(commitBtn);
     return h('div', {},
@@ -124,7 +133,7 @@ export async function render(root) {
           h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, t('جديد')), h('th', {}, t('تحديث')),
             h('th', {}, t('بلا تغيير')), h('th', {}, t('أمثلة من الجديد')))),
           h('tbody', {}, rows))) : h('p', { class: 'muted' }, t('لا توجد بيانات صالحة للاستيراد')),
-        ttLine, cards,
+        wipedLine, ttLine, cards,
         rep.error_count ? h('p', { class: 'form-error' },
           t('الأسطر التي فيها أخطاء لن تُستورد، ويُستورد الباقي. يمكنك تصحيح الملف وإعادة المعاينة.')) : null,
         done
@@ -152,11 +161,16 @@ export async function render(root) {
     if (e.dataTransfer.files[0]) { fileInput.files = e.dataTransfer.files; fileInput.dispatchEvent(new Event('change')); }
   });
 
+  const replaceBox = h('label', { class: 'replace-box', for: 'import-replace' }, replaceAll,
+    h('span', {}, h('strong', {}, t('البدء من جديد: حذف كل البيانات الحالية قبل الاستيراد')),
+      h('span', { class: 'small' }, t('يُبقي المستخدمين واسم المدرسة وشعارها وأيام الأسبوع فقط. استخدمه لاستيراد ملف aSc جديد بدل القديم.'))));
   const stepHead = (n, text) => h('h2', { class: 'step-head' }, h('span', { class: 'step-mark' }, String(n)), text);
   put(root,
     h('h1', { class: 'title' }, t('الاستيراد')),
     h('div', { class: 'stat import-box' },
       stepHead(1, t('اختر الملف')), drop, fileInput, kindRow,
+      h('p', { class: 'muted small' }, t('يمكن اختيار أكثر من ملف معاً، مثل ملف aSc ‏(‎.xml) مع ملف Excel لتوقيت الحصص.')),
+      replaceBox,
       stepHead(2, t('اضغط «معاينة» لترى ما سيُضاف قبل الحفظ')),
       h('div', { class: 'toolbar' }, previewBtn),
       stepHead(3, t('راجع المعاينة ثم اضغط «تأكيد الاستيراد»')),

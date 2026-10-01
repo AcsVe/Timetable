@@ -47,7 +47,7 @@ from app.models import (
 from app.models.base import new_id
 
 ENTITIES = ("stages", "grades", "sections", "divisions", "groups", "subjects", "teachers", "rooms",
-            "bell_schedules", "lessons")
+            "bell_schedules", "bell_assignments", "lessons")
 MAX_ISSUES = 300
 ASC_STAGE = "مستورد من aSc"
 
@@ -68,6 +68,7 @@ class Importer:
         self.cards = {"placed": 0, "unplaced": 0}
         self.tt: Timetable | None = None
         self.tt_created = False
+        self.skip_asc_bells = False   # a bell-times sheet in the same import replaces the aSc periods
         # key (from the file) → object
         self.k_subject: dict[str, Subject] = {}
         self.k_teacher: dict[str, Teacher] = {}
@@ -155,8 +156,12 @@ class Importer:
             db.session.flush()
             self.lessons()
             db.session.flush()
+        if b.bells:
+            self.bell_sheet()
+            db.session.flush()
         if b.cards and self.tt is not None:
-            self.bells()
+            if not self.skip_asc_bells:
+                self.bells()
             db.session.flush()
             self.place_cards()
             db.session.flush()
@@ -333,6 +338,20 @@ class Importer:
         if self.timetable_id:
             self.tt = editable_timetable(self.timetable_id)
             return
+        term = self._term()
+        self.tt = Timetable(id=new_id(), term_id=term.id, name=self.new_tt_name or "جدول مستورد", status="draft",
+                            cycle_weeks=1)
+        db.session.add(self.tt)
+        self.tt_created = True
+
+    def _term(self) -> Term:
+        """The term the import belongs to: the target timetable's, the chosen one, or the current year's first."""
+        if self.tt is not None:
+            return db.session.get(Term, self.tt.term_id)
+        if self.timetable_id:
+            tt = db.session.get(Timetable, self.timetable_id)
+            if tt is not None:
+                return db.session.get(Term, tt.term_id)
         term = db.session.get(Term, self.term_id) if self.term_id else None
         if term is None:
             year = db.session.scalars(select(AcademicYear).where(AcademicYear.is_current.is_(True))).first() \
@@ -348,10 +367,7 @@ class Importer:
                 term = Term(id=new_id(), academic_year_id=year.id, name_ar="الفصل الأول", name_en="Term 1", ordinal=1)
                 db.session.add(term)
                 db.session.flush()
-        self.tt = Timetable(id=new_id(), term_id=term.id, name=self.new_tt_name or "جدول مستورد", status="draft",
-                            cycle_weeks=1)
-        db.session.add(self.tt)
-        self.tt_created = True
+        return term
 
     def _resolve_target(self, ref, group_ref, rec) -> tuple[Section, StudentGroup | None] | None:
         if isinstance(ref, str):  # aSc key
@@ -522,6 +538,109 @@ class Importer:
                     db.session.add(BellAssignment(id=new_id(), term_id=self.tt.term_id, weekday_id=d.id,
                                                   stage_id=sid, bell_schedule_id=sched.id))
 
+    # ------------------------------------------------------------------ bell-times sheet (Excel)
+    def bell_sheet(self):
+        """Timing templates from a spreadsheet: each template's slots replace the stored ones, then the
+        template is assigned to the listed days × grades (grade-specific, so it wins over stage-wide)."""
+        term = self._term()
+        days_all = self.school_days()
+        all_days = db.session.scalars(select(Weekday)).all()
+        for tpl in self.b.bells:
+            slots, ok = [], True
+            parsed = []
+            for sl in tpl["slots"]:
+                st, en = time.fromisoformat(sl["start"]), time.fromisoformat(sl["end"])
+                if st.hour < 7:                         # 1:10 written for 13:10
+                    st = st.replace(hour=st.hour + 12)
+                if en.hour < 7:
+                    en = en.replace(hour=en.hour + 12)
+                parsed.append((st, en, sl))
+            parsed.sort(key=lambda x: x[0])
+            prev = None
+            for st, en, sl in parsed:
+                if en <= st or (prev and st < prev):
+                    self._issue("error", f"أوقات القالب «{tpl['template']}» متداخلة أو مقلوبة ({sl['start']}–{sl['end']})",
+                                f"Template '{tpl['template']}' has overlapping or reversed times ({sl['start']}–{sl['end']})", sl)
+                    ok = False
+                    break
+                prev = en
+            nos = [sl["no"] for _st, _en, sl in parsed if sl["kind"] == "lesson"]
+            if len(nos) != len(set(nos)):
+                self._issue("error", f"رقم حصة مكرر في القالب «{tpl['template']}»",
+                            f"Duplicate period number in template '{tpl['template']}'", tpl)
+                ok = False
+            if not ok:
+                continue
+            for i, (st, en, sl) in enumerate(parsed, start=1):
+                lesson = sl["kind"] == "lesson"
+                slots.append(BellSlot(slot_no=i, kind=sl["kind"], period_no=sl["no"] if lesson else None,
+                                      starts_at=st, ends_at=en, label_ar=None if lesson else "استراحة",
+                                      label_en=None if lesson else "Break"))
+            sched = db.session.scalars(select(BellSchedule).where(BellSchedule.name_ar == tpl["template"])).first()
+            created = sched is None
+            if created:
+                sched = BellSchedule(id=new_id(), name_ar=tpl["template"])
+                db.session.add(sched)
+            else:
+                sched.slots.clear()
+                db.session.flush()
+            sched.slots = slots
+            self._upsert("bell_schedules", sched, {}, created, tpl["template"])
+            if not created:
+                self.stats["bell_schedules"]["unchanged"] -= 1
+                self.stats["bell_schedules"]["updated"] += 1
+            db.session.flush()
+
+            # days
+            days, bad_days = [], []
+            for d in tpl["days"]:
+                k = norm(d)
+                if k in {norm(x) for x in ("كل الأيام", "جميع الأيام", "الكل", "all", "every day")}:
+                    days += [x for x in days_all if x not in days]
+                    continue
+                m = next((x for x in all_days if k in (norm(x.name_ar), norm(x.name_en))), None)
+                if m is None:
+                    bad_days.append(d)
+                elif m not in days:
+                    days.append(m)
+            if not tpl["days"]:
+                days = list(days_all)
+            if bad_days:
+                self._issue("error", f"أيام غير معروفة في القالب «{tpl['template']}»: {'، '.join(bad_days)}",
+                            f"Unknown days in template '{tpl['template']}': {', '.join(bad_days)}", tpl)
+            # grades (names, numbers, or ranges like 7-9)
+            grades, missing = [], []
+            for g in tpl["grades"]:
+                rng = re.fullmatch(r"\s*(\d+)\s*[-–—]\s*(\d+)\s*", g.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")))
+                tokens = [str(n) for n in range(int(rng.group(1)), int(rng.group(2)) + 1)] if rng else [g]
+                for tok in tokens:
+                    if norm(tok) in {norm("الكل"), "all"}:
+                        found = list(self.grades)
+                    else:
+                        found = [x for x in self.grades if norm(tok) in (norm(x.name_ar), norm(x.name_en))
+                                 or (tok.strip().isdigit() and _digits(x.name_ar) == int(tok) and re.fullmatch(r"\D*\d+\D*", x.name_ar))]
+                    if not found:
+                        missing.append(tok)
+                    grades += [x for x in found if x not in grades]
+            if missing:
+                self._issue("warning", f"القالب «{tpl['template']}»: الصفوف ({'، '.join(missing)}) غير موجودة، فلم يُسنَد إليها",
+                            f"Template '{tpl['template']}': grades ({', '.join(missing)}) not found, not assigned", tpl)
+            existing = {(a.weekday_id, a.grade_id): a for a in db.session.scalars(select(BellAssignment).where(
+                BellAssignment.term_id == term.id, BellAssignment.grade_id.is_not(None)))}
+            for g in grades:
+                for d in days:
+                    a = existing.get((d.id, g.id))
+                    if a is None:
+                        db.session.add(BellAssignment(id=new_id(), term_id=term.id, weekday_id=d.id, stage_id=g.stage_id,
+                                                      grade_id=g.id, bell_schedule_id=sched.id))
+                        self.stats["bell_assignments"]["created"] += 1
+                    elif a.bell_schedule_id != sched.id:
+                        a.bell_schedule_id = sched.id
+                        self.stats["bell_assignments"]["updated"] += 1
+                    else:
+                        self.stats["bell_assignments"]["unchanged"] += 1
+            db.session.flush()
+
     def place_cards(self):
         from app.rules.bells import BellCache
         tt = self.tt
@@ -682,9 +801,76 @@ class Importer:
                         where="aSc")
 
 
-def run_import(bundle: Bundle, **opts) -> dict:
-    if bundle.is_empty():
+# Everything the school enters — kept: users, school name/logo, weekdays, settings, audit history.
+WIPE_TABLES = ("occupancy", "card", "lesson_teacher", "lesson_target", "lesson", "availability", "constraint_rule",
+               "timetable", "bell_assignment", "bell_slot", "bell_schedule", "student_group", "division", "section",
+               "teacher_stage", "teacher_subject", "subject_room", "user_stage", "teacher", "subject", "room",
+               "building", "grade", "stage", "term", "academic_year")
+WIPE_COUNTED = {"timetable": "timetables", "teacher": "teachers", "subject": "subjects", "section": "sections",
+                "lesson": "lessons", "room": "rooms", "grade": "grades", "stage": "stages", "bell_schedule": "bell_schedules"}
+
+
+def wipe_school_data() -> dict:
+    """Delete all school data in the current transaction (the caller commits or rolls back)."""
+    from sqlalchemy import text
+    counts = {}
+    for table in WIPE_TABLES:
+        n = db.session.execute(text(f"DELETE FROM {table}")).rowcount
+        if table in WIPE_COUNTED:
+            counts[WIPE_COUNTED[table]] = n
+    db.session.flush()
+    db.session.expire_all()
+    return counts
+
+
+def _merge(reports: list[dict]) -> dict:
+    out = reports[0]
+    for r in reports[1:]:
+        for ent, s in r["summary"].items():
+            for k, v in s.items():
+                out["summary"][ent][k] += v
+        for ent, names in r["created"].items():
+            out["created"].setdefault(ent, []).extend(names)
+        for k in ("placed", "unplaced"):
+            out["cards"][k] += r["cards"][k]
+        out["timetable"] = out["timetable"] or r["timetable"]
+        out["errors"] += r["errors"]
+        out["warnings"] += r["warnings"]
+        out["error_count"] += r["error_count"]
+        out["warning_count"] += r["warning_count"]
+    out["errors"], out["warnings"] = out["errors"][:MAX_ISSUES], out["warnings"][:MAX_ISSUES]
+    return out
+
+
+def run_import(bundles: Bundle | list[Bundle], *, replace_all: bool = False, **opts) -> dict:
+    bundles = [bundles] if isinstance(bundles, Bundle) else list(bundles)
+    if all(b.is_empty() for b in bundles):
         raise ApiError("validation", 400, details={"reason": "empty_import"},
                        message="لم يُعثر في الملف على بيانات يمكن استيرادها",
                        message_en="No importable data was found in the file")
-    return Importer(bundle, **opts).run()
+    wiped = wipe_school_data() if replace_all else None
+    if replace_all:
+        opts["timetable_id"] = None
+        opts["term_id"] = None
+        opts["stage_id"] = None
+    # aSc first (it creates grades and sections), then spreadsheets (bell times refer to those grades).
+    bundles.sort(key=lambda b: 0 if b.source == "asc" else 1)
+    has_bells = any(b.bells for b in bundles)
+    if has_bells:   # the bell sheet replaces the aSc periods, so notes about those periods don't apply
+        for b in bundles:
+            b.warnings = [w for w in b.warnings if w.where != "periods"]
+    reports, tt_id, tt_created = [], opts.pop("timetable_id", None), False
+    for b in bundles:
+        if b.is_empty():
+            continue
+        imp = Importer(b, timetable_id=tt_id, **opts)
+        imp.skip_asc_bells = has_bells
+        reports.append(imp.run())
+        if imp.tt is not None:
+            tt_id = imp.tt.id
+            tt_created = tt_created or imp.tt_created
+    rep = _merge(reports)
+    if rep["timetable"]:
+        rep["timetable"]["created"] = tt_created
+    rep["wiped"] = wiped
+    return rep

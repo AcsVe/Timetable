@@ -265,9 +265,21 @@ export async function render(root) {
   fillEntities();
   syncControls();
 
+  // One click from the grid to a printable PDF of what is on screen (one page per section / teacher).
+  function printPdf() {
+    const kinds = { section: 'section-timetable', 'whole-sections': 'section-timetable', teacher: 'teacher-timetable',
+                    'whole-teachers': 'teacher-timetable', room: 'room-timetable' };
+    const q = new URLSearchParams({ format: 'pdf', lang: document.documentElement.lang === 'en' ? 'en' : 'ar', layout: 'rows' });
+    const key = { section: 'section_id', teacher: 'teacher_id', room: 'room_id' }[mode];
+    if (key && entityId) q.set(key, entityId);
+    else if (stageSel.value) q.set('stage_id', stageSel.value);
+    window.open(`/api/timetables/${ctx.tt.id}/reports/${kinds[mode]}?${q}`, '_blank');
+  }
+
   put(root, h('h1', { class: 'title' }, `${t('شبكة الجدول')} — ${ctx.tt.name}`),
     ctx.readOnly ? h('p', { class: 'reasons' }, t('هذا الجدول مؤرشف وللقراءة فقط')) : null,
     h('div', { class: 'toolbar sticky' }, modeSel, entitySel, stageSel, orientSel,
+      h('button', { class: 'btn', id: 'grid-print', type: 'button', onclick: printPdf }, t('طباعة PDF')),
       h('a', { class: 'btn ghost', href: '#/lessons' }, t('الدروس والتوزيع')),
       h('a', { class: 'btn ghost', href: '#/validate' }, t('التحقق'))),
     info, gridHost);

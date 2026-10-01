@@ -167,7 +167,7 @@ def test_template_downloads_and_imports_as_is(base, ctx):
     r = base.get("/api/import/template.xlsx")
     assert r.status_code == 200
     wb = load_workbook(io.BytesIO(r.data))
-    assert wb.sheetnames == ["تعليمات", "المباحث", "القاعات", "المعلمون", "الشعب", "الدروس"]
+    assert wb.sheetnames == ["تعليمات", "المباحث", "القاعات", "المعلمون", "الشعب", "التوقيت", "الدروس"]
     rep = upload(base, "/api/import/commit", r.data, "قالب.xlsx", new_timetable_name="تجربة").get_json()
     assert rep["error_count"] == 0, rep["errors"]
     s = rep["summary"]
@@ -246,3 +246,44 @@ def test_asc_cp1256_names_declared_as_1252_times_and_meetings(base, ctx):
     assert ctx.query(Availability).count() == 2   # two teachers × one meeting slot
     assert any("اجتماع بلا شعبة" in w["message"] for w in rep["warnings"])
     assert any("صُحِّحت" in w["message"] for w in rep["warnings"])
+
+
+def test_start_over_with_asc_and_bell_sheet_together(base, ctx):
+    """Replace everything: an old import is wiped, then the aSc file and the school's bell-times
+    sheet are imported in one go; grade-specific timings (short Tuesday) are assigned."""
+    from tests.data.bells_raed import rows
+    from app.models import BellAssignment, BellSchedule, Timetable, Weekday
+    upload(base, "/api/import/commit", ASC_XML.encode(), "old.xml", new_timetable_name="قديم")
+    base.ok("post", "/api/stages", {"name_ar": "مرحلة يدوية"})
+    xml = ASC_XML.replace('<grades columns="grade,name,short"><grade grade="7" name="السابع" short="7"/></grades>', "")
+    bells = _xlsx({"التوقيت": rows()})
+    r = base.post("/api/import/commit", data={"file": [(io.BytesIO(xml.encode()), "new.xml"), (io.BytesIO(bells), "bells.xlsx")],
+                                               "replace_all": "1", "new_timetable_name": "الجديد"},
+                  content_type="multipart/form-data")
+    rep = r.get_json()
+    assert r.status_code == 200, rep
+    assert rep["error_count"] == 0, rep["errors"]
+    assert rep["wiped"]["timetables"] == 1 and rep["wiped"]["stages"] == 2
+    assert [t.name for t in ctx.query(Timetable)] == ["الجديد"]
+    assert ctx.query(Lesson).count() == 4 and ctx.query(Teacher).count() == 3
+    assert ctx.query(BellSchedule).filter_by(name_ar="توقيت aSc").count() == 0      # replaced by the sheet
+    assert ctx.query(BellSchedule).count() == 9
+    g7 = ctx.query(Grade).filter_by(name_ar="7").one()
+    tue = ctx.query(Weekday).filter_by(name_ar="الثلاثاء").one()
+    a = ctx.query(BellAssignment).filter_by(grade_id=g7.id, weekday_id=tue.id).one()
+    sched = ctx.get(BellSchedule, a.bell_schedule_id)
+    assert sched.name_ar == "العليا (7–9) — الثلاثاء"
+    assert sched.slots[-1].ends_at.strftime("%H:%M") == "13:20"
+    assert any("غير موجودة" in w["message"] for w in rep["warnings"])          # grades 1–6, 10–12 absent here
+    assert rep["cards"]["unplaced"] == 0
+    # printable section timetable: subject + teacher, Tuesday shows its own times
+    tt = rep["timetable"]["id"]
+    sec = ctx.query(Section).filter_by(name_ar="7أ").one()
+    j = base.ok("get", f"/api/timetables/{tt}/reports/section-timetable?section_id={sec.id}")
+    g = j["grids"][0]
+    assert g["day_notes"][2] == "08:00–13:20" and g["day_notes"][0] is None
+    assert any(c["entries"][0][1] for c in g["cells"])
+    pdf = base.get(f"/api/timetables/{tt}/reports/section-timetable?section_id={sec.id}&format=pdf")
+    assert pdf.status_code == 200 and pdf.data[:4] == b"%PDF"
+    t = base.ok("get", f"/api/timetables/{tt}/reports/teacher-timetable")
+    assert any("الحصص المُسنَدة" in g["footer"] for g in t["grids"])

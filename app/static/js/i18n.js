@@ -194,6 +194,14 @@ const I18N = {
   'من أين أحصل على الملف؟': 'Where do I get the file?',
   'يُدخل المعلمين والمباحث والشعب والدروس والجدول دفعةً واحدة': 'Brings in teachers, subjects, sections, lessons and the timetable in one go',
   'الاستيراد (aSc / Excel)': 'Import (aSc / Excel)',
+  'ستُحذف البيانات الحالية أولاً': 'Current data will be deleted first',
+  'البدء من جديد: حذف كل البيانات الحالية قبل الاستيراد': 'Start over: delete all current data before importing',
+  'حُذفت البيانات السابقة': 'Previous data deleted',
+  'سيُحذف كل ما في النظام من بيانات (المعلمون والمباحث والشعب والجداول والتوقيت) ويُستبدل بما في الملف. لا يمكن التراجع. أتريد المتابعة؟': 'All data in the system (teachers, subjects, sections, timetables, bell times) will be deleted and replaced by the file. This cannot be undone. Continue?',
+  'يُبقي المستخدمين واسم المدرسة وشعارها وأيام الأسبوع فقط. استخدمه لاستيراد ملف aSc جديد بدل القديم.': 'Keeps only users, the school name and logo, and the weekdays. Use it to import a new aSc file instead of the old one.',
+  'يمكن اختيار أكثر من ملف معاً، مثل ملف aSc ‏(‎.xml) مع ملف Excel لتوقيت الحصص.': 'You can pick several files together, e.g. the aSc file (.xml) with an Excel file of bell times.',
+  'طباعة PDF': 'Print PDF',
+  'إسناد التوقيت للأيام والصفوف': 'Timing assigned to days and grades',
 };
 
 function readLang() {

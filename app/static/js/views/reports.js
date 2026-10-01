@@ -118,14 +118,15 @@ function renderReport(rep) {
       return h('td', {}, (cells.get(key) || []).map(e => h('div', { class: 'entry' },
         h('b', {}, e[0]), e.slice(1).filter(Boolean).map(x => h('div', {}, x)))));
     };
+    const note = di => (g.day_notes && g.day_notes[di] ? h('span', { class: 'ptime', dir: 'ltr' }, g.day_notes[di]) : null);
     const pHead = p => [h('span', { class: 'pnum' }, String(p.no)), p.time ? h('span', { class: 'ptime', dir: 'ltr' }, p.time) : null];
     const table = rep.layout === 'cols'
       ? h('table', { class: 'data report-grid' },
-          h('thead', {}, h('tr', {}, h('th', {}, t('الحصة')), g.days.map(d => h('th', {}, d)))),
+          h('thead', {}, h('tr', {}, h('th', {}, t('الحصة')), g.days.map((d, di) => h('th', {}, d, note(di))))),
           h('tbody', {}, g.periods.map(p => h('tr', {}, h('th', {}, pHead(p)), g.days.map((_, di) => td(di, p.no))))))
       : h('table', { class: 'data report-grid days-rows' },
           h('thead', {}, h('tr', {}, h('th', {}, t('اليوم')), g.periods.map(p => h('th', {}, pHead(p))))),
-          h('tbody', {}, g.days.map((d, di) => h('tr', {}, h('th', { class: 'dayname' }, d), g.periods.map(p => td(di, p.no))))));
+          h('tbody', {}, g.days.map((d, di) => h('tr', {}, h('th', { class: 'dayname' }, d, note(di)), g.periods.map(p => td(di, p.no))))));
     blocks.push(h('section', { class: 'report-block', id: blockId(g.title) }, h('h3', {}, g.title),
       g.subtitle ? h('div', { class: 'muted' }, g.subtitle) : null,
       h('div', { class: 'grid-scroll' }, table),

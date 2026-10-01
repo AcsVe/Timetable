@@ -56,23 +56,28 @@ class Grid:
     missing: set = field(default_factory=set)        # (day_idx, period_no) that don't exist that day
     footer: str | None = None
     subtitle: str | None = None
+    day_notes: list = field(default_factory=list)    # per day: own times when they differ from the header
 
 
-def grid_matrix(g: "Grid", layout: str, rtl: bool):
+def grid_matrix(g: "Grid", layout: str, rtl: bool, raw: bool = False):
     """Lay a grid out for printing. Returns (corner, column_headers, rows) where rows are
     (row_label, [cell_text | None, ...], [missing_flags]). layout "rows" = days as rows (ASC print style)."""
     period_label = lambda p, tl: f"{p}\n{tl}" if tl else str(p)  # noqa: E731
-    text = lambda d, p: "\n".join("\n".join(x for x in e if x) for e in g.cells.get((d, p), [])) or None  # noqa: E731
+    if raw:   # entries kept separate so the renderer can style the subject line and the teacher line apart
+        text = lambda d, p: g.cells.get((d, p)) or None  # noqa: E731
+    else:
+        text = lambda d, p: "\n".join("\n".join(x for x in e if x) for e in g.cells.get((d, p), [])) or None  # noqa: E731
+    note = lambda d: g.day_notes[d] if d < len(g.day_notes) and g.day_notes[d] else None  # noqa: E731
     if layout == "cols":
         corner = "الحصة" if rtl else "Period"
-        heads = list(g.days)
+        heads = [f"{day}\n{note(d)}" if note(d) else day for d, day in enumerate(g.days)]
         rows = [(period_label(p, tl), [text(d, p) for d in range(len(g.days))],
                  [(d, p) in g.missing for d in range(len(g.days))]) for p, tl in g.periods]
     else:
         corner = "اليوم" if rtl else "Day"
         heads = [period_label(p, tl) for p, tl in g.periods]
-        rows = [(day, [text(d, p) for p, _ in g.periods], [(d, p) in g.missing for p, _ in g.periods])
-                for d, day in enumerate(g.days)]
+        rows = [(f"{day}\n{note(d)}" if note(d) else day, [text(d, p) for p, _ in g.periods],
+                 [(d, p) in g.missing for p, _ in g.periods]) for d, day in enumerate(g.days)]
     return corner, heads, rows
 
 
@@ -111,7 +116,7 @@ class Report:
                 "title": g.title, "days": g.days, "periods": [{"no": n, "time": t} for n, t in g.periods],
                 "cells": [{"day": d, "period": p, "entries": v} for (d, p), v in sorted(g.cells.items())],
                 "missing": [{"day": d, "period": p} for d, p in sorted(g.missing)], "footer": g.footer,
-                "subtitle": g.subtitle,
+                "subtitle": g.subtitle, "day_notes": g.day_notes,
             } for g in self.grids],
             "tables": [{"title": t.title, "columns": t.columns, "rows": t.rows, "numeric": sorted(t.numeric),
                         "percent": sorted(t.percent), "totals": t.totals} for t in self.tables],
@@ -158,7 +163,11 @@ class Ctx:
 
     def section_label(self, sid) -> str:
         s = self.sections.get(sid)
-        return f"{self.name(self.grades.get(s.grade_id))} / {self.name(s)}" if s else "?"
+        if not s:
+            return "?"
+        grade, sec = self.name(self.grades.get(s.grade_id)), self.name(s)
+        # aSc-style section names already contain the grade ("10 A"): don't print "10 / 10 A"
+        return sec if grade and sec.replace(" ", "").startswith(grade.replace(" ", "")) else f"{grade} / {sec}"
 
     def target_label(self, tg) -> str:
         base = self.section_label(tg.section_id)
@@ -248,6 +257,7 @@ class Ctx:
 def _grid_for(ctx: Ctx, title: str, cards: list[Card], entry, grade_ids: list | None) -> Grid:
     day_names = [ctx.name(d) for d in ctx.days]
     per_day: list[dict[int, str | None]] = []
+    spans: list[str | None] = []
     grades = [ctx.grades[g] for g in grade_ids] if grade_ids else list(ctx.grades.values())
     for d in ctx.days:
         slots: dict[int, str | None] = {}
@@ -260,6 +270,11 @@ def _grid_for(ctx: Ctx, title: str, cards: list[Card], entry, grade_ids: list | 
                 for s in sched.slots:
                     if s.kind == "lesson":
                         slots[s.period_no] = f"{s.starts_at.strftime('%H:%M')}–{s.ends_at.strftime('%H:%M')}"
+                lessons_ = [s for s in sched.slots if s.kind == "lesson"]
+                spans.append(f"{lessons_[0].starts_at.strftime('%H:%M')}–{lessons_[-1].ends_at.strftime('%H:%M')}"
+                             if lessons_ else None)
+            else:
+                spans.append(None)
         per_day.append(slots)
     all_p = sorted({p for d in per_day for p in d})
     periods = []
@@ -267,6 +282,11 @@ def _grid_for(ctx: Ctx, title: str, cards: list[Card], entry, grade_ids: list | 
         times = [d[p] for d in per_day if d.get(p)]
         periods.append((p, max(set(times), key=times.count) if times else None))
     grid = Grid(title=title, days=day_names, periods=periods)
+    # A day whose times differ from the header (e.g. a short Tuesday) shows its own start–end.
+    if spans:
+        header = {p: tl for p, tl in periods}
+        grid.day_notes = [spans[i] if any(d.get(p) and d.get(p) != header.get(p) for p in d) else None
+                          for i, d in enumerate(per_day)]
     for di, d in enumerate(per_day):
         for p in all_p:
             if p not in d:
@@ -301,7 +321,23 @@ def teacher_grids(ctx: Ctx) -> list[Grid]:
                 lines.append(ctx.name(ctx.rooms.get(c.room_id)))
             return lines
         title = f"{ctx.L('المعلمة' if t.gender == 'f' else 'المعلم', 'Teacher')}: {ctx.name(t)}"
-        grids.append(_grid_for(ctx, title, cards, entry, None))
+        grid = _grid_for(ctx, title, cards, entry, None)
+        mine = [l for l in ctx.lessons if t.id in l.teacher_ids]
+        assigned = sum(l.periods_per_week for l in mine)
+        placed = sum(c.duration for c in cards if c.weekday_id)
+        subjects = sorted({ctx.name(ctx.subjects.get(l.subject_id)) for l in mine if ctx.subjects.get(l.subject_id)})
+        parts = [ctx.L(f"النصاب الأسبوعي: {t.target_weekly_periods}", f"Weekly load: {t.target_weekly_periods}")
+                 if t.target_weekly_periods else None,
+                 ctx.L(f"الحصص المُسنَدة: {assigned}", f"Assigned periods: {assigned}"),
+                 ctx.L(f"الموزَّعة في الجدول: {placed}", f"Placed: {placed}")]
+        if t.target_weekly_periods:
+            diff = assigned - t.target_weekly_periods
+            if diff:
+                parts.append(ctx.L(f"{'زيادة' if diff > 0 else 'نقص'}: {abs(diff)}", f"{'Over' if diff > 0 else 'Under'}: {abs(diff)}"))
+        grid.footer = " — ".join(x for x in parts if x)
+        if subjects:
+            grid.subtitle = f"{ctx.L('المباحث', 'Subjects')}: {ctx.sep.join(subjects)}"
+        grids.append(grid)
     return grids
 
 

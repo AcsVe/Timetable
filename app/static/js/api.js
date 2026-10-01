@@ -82,7 +82,7 @@ export async function upload(url, file, { key, fields = {} } = {}) {
                              message_en: 'No connection — cannot save right now' });
   }
   const fd = new FormData();
-  fd.append('file', file);
+  for (const f of (Array.isArray(file) ? file : [file])) fd.append('file', f);
   for (const [k, v] of Object.entries(fields)) if (v != null) fd.append(k, v);
   const res = await fetch(url, { method: 'POST', credentials: 'same-origin', body: fd,
                                  headers: { Accept: 'application/json', 'Idempotency-Key': key || uuid() } });

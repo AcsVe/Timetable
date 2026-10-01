@@ -124,7 +124,7 @@ def _fmt(v, percent=False):
 
 def _grid_flowables(rep: Report, g: Grid, st, width) -> list:
     rtl = rep.rtl
-    corner, heads, rows = grid_matrix(g, rep.layout, rtl)
+    corner, heads, rows = grid_matrix(g, rep.layout, rtl, raw=True)
     n = len(heads)
     first_w = (2.4 if rep.layout == "rows" else 2.6) * cm
     col = (width - first_w) / max(n, 1)
@@ -135,12 +135,12 @@ def _grid_flowables(rep: Report, g: Grid, st, width) -> list:
     missing_cells = []
     for i, (label, cells, missing) in enumerate(rows, start=1):
         row = [Paragraph(rich(label, rtl, True), st["cell"])]
-        for j, (text, miss) in enumerate(zip(cells, missing)):
+        for j, (entries, miss) in enumerate(zip(cells, missing)):
             if miss:
                 missing_cells.append((j + 1, i))
-            row.append(Paragraph(rich(text, rtl, width=cw, size=size),
+            row.append(Paragraph(_cell_markup(entries, rtl, cw, size),
                                  ParagraphStyle("c", parent=st["cell"], fontSize=size, leading=size + 3))
-                       if text and not miss else "")
+                       if entries and not miss else "")
         data.append(row)
     col_w = [first_w] + [col] * n
     if rtl:
@@ -153,7 +153,7 @@ def _grid_flowables(rep: Report, g: Grid, st, width) -> list:
         even = max(1.6 * cm, min(3.2 * cm, 11 * cm / max(len(rows), 1)))
         row_h = [None]
         for _label, cells, _m in rows:
-            lines = max([1] + [(x or "").count("\n") + 1 for x in cells])
+            lines = max([1] + [sum(len([y for y in e if y]) for e in (x or [])) for x in cells])
             row_h.append(max(even, (lines + 1) * (size + 3) * 1.15))
     t = Table(data, colWidths=col_w, rowHeights=row_h, repeatRows=1)
     label_col = n if rtl else 0
@@ -174,6 +174,20 @@ def _grid_flowables(rep: Report, g: Grid, st, width) -> list:
     if g.footer:
         out += [Spacer(1, 6), Paragraph(rich(g.footer, rtl), st["foot"])]
     return out
+
+
+def _cell_markup(entries: list[list[str]], rtl: bool, width: float, size: float) -> str:
+    """One timetable cell: the subject in bold, the teacher (and room) below it in a smaller grey font."""
+    small = max(size - 1.8, 5.5)
+    parts = []
+    for e in entries:
+        lines = [x for x in e if x]
+        if not lines:
+            continue
+        parts.append(rich(lines[0], rtl, True, width, size))
+        for x in lines[1:]:
+            parts.append(f'<font size="{small}" color="#555555">{rich(x, rtl, False, width, small)}</font>')
+    return "<br/>".join(parts)
 
 
 def _table_flowables(rep: Report, tb: DataTable, st, width) -> list:
