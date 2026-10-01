@@ -160,6 +160,9 @@ class Importer:
             db.session.flush()
             self.place_cards()
             db.session.flush()
+        if b.meetings and self.tt is not None:
+            self.meetings()
+            db.session.flush()
         return self.report()
 
     def report(self) -> dict:
@@ -531,16 +534,26 @@ class Importer:
         section_of = {s.id: s for s in self.sections}
         group_div = {g.id: g.division_id for g in self.groups}
 
-        busy: dict[tuple, set[int]] = defaultdict(set)            # (type, id, day) → periods
-        class_busy: dict[tuple, list] = defaultdict(list)          # (section, day) → [(period, group_id)]
-        for o in db.session.scalars(select(Occupancy).where(Occupancy.timetable_id == tt.id)):
-            busy[(o.resource_type, o.resource_id, o.weekday_id)].update(range(o.periods.lower, o.periods.upper))
+        subj_name = {s.id: s.name_ar for s in db.session.scalars(select(Subject))}
+        sec_name = {s.id: s.name_ar for s in self.sections}
+        self._names = {"teacher": {t.id: t.name_ar for t in db.session.scalars(select(Teacher))},
+                       "room": {r.id: r.name_ar for r in db.session.scalars(select(Room))}, "section": sec_name}
+        label_of = lambda l: f"{subj_name.get(l.subject_id, '')} ({'، '.join(sec_name.get(t.section_id, '') for t in l.targets)})"  # noqa: E731
+
+        busy: dict[tuple, dict[int, str]] = defaultdict(dict)     # (type, id, day) → {period: what occupies it}
+        class_busy: dict[tuple, list] = defaultdict(list)          # (section, day) → [(period, group_id, what)]
         placed = db.session.scalars(select(Card).where(Card.timetable_id == tt.id, Card.weekday_id.is_not(None))
-                                    .options(selectinload(Card.lesson).selectinload(Lesson.targets))).all()
+                                    .options(selectinload(Card.lesson).selectinload(Lesson.targets),
+                                             selectinload(Card.lesson).selectinload(Lesson.teachers))).all()
         for c in placed:
-            for t in c.lesson.targets:
-                for p in range(c.period_no, c.period_no + c.duration):
-                    class_busy[(t.section_id, c.weekday_id)].append((p, t.group_id))
+            what = label_of(c.lesson)
+            for p in range(c.period_no, c.period_no + c.duration):
+                for tid in c.lesson.teacher_ids:
+                    busy[("teacher", tid, c.weekday_id)][p] = what
+                if c.room_id:
+                    busy[("room", c.room_id, c.weekday_id)][p] = what
+                for t in c.lesson.targets:
+                    class_busy[(t.section_id, c.weekday_id)].append((p, t.group_id, what))
 
         by_lesson: dict[str, list[dict]] = defaultdict(list)
         for c in self.b.cards:
@@ -592,8 +605,10 @@ class Importer:
                                         bells, grade_of, section_of, group_div)
                 if reason:
                     self.cards["unplaced"] += 1
-                    self._issue("warning", f"بقيت حصة غير موزعة ({reason[0]})", f"A card was left unplaced ({reason[1]})",
-                                where=f"{db.session.get(Subject, lesson.subject_id).name_ar}")
+                    when = f"{days[day_idx].name_ar}، الحصة {start}"
+                    when_en = f"{days[day_idx].name_en or days[day_idx].name_ar}, period {start}"
+                    self._issue("warning", f"لم تُوزَّع {label_of(lesson)} في {when}: {reason[0]}",
+                                f"{label_of(lesson)} not placed on {when_en}: {reason[1]}", where="aSc")
                     continue
                 free.remove(card)
                 card.weekday_id, card.period_no = wd, start
@@ -606,30 +621,65 @@ class Importer:
                 for rtype, rid in rows:
                     db.session.add(Occupancy(timetable_id=tt.id, card_id=card.id, resource_type=rtype, resource_id=rid,
                                              weekday_id=wd, periods=rng, weeks=weeks))
-                    busy[(rtype, rid, wd)].update(periods)
+                    for p in periods:
+                        busy[(rtype, rid, wd)][p] = label_of(lesson)
                 for t in lesson.targets:
                     for p in periods:
-                        class_busy[(t.section_id, wd)].append((p, t.group_id))
+                        class_busy[(t.section_id, wd)].append((p, t.group_id, label_of(lesson)))
                 self.cards["placed"] += 1
 
-    @staticmethod
-    def _conflict(lesson, wd, periods, teacher_ids, room, busy, class_busy, bells, grade_of, section_of, group_div):
+    def _conflict(self, lesson, wd, periods, teacher_ids, room, busy, class_busy, bells, grade_of, section_of, group_div):
+        names = self._names
         for t in teacher_ids:
-            if busy[("teacher", t, wd)] & periods:
-                return "تعارض معلم", "teacher clash"
-        if room and not room.is_shared and busy[("room", room.id, wd)] & periods:
-            return "تعارض قاعة", "room clash"
+            hit = next((busy[("teacher", t, wd)][p] for p in sorted(periods) if p in busy[("teacher", t, wd)]), None)
+            if hit:
+                n = names["teacher"].get(t, "")
+                return (f"المعلم {n} مشغول في {hit} (التعارض موجود في ملف aSc نفسه)",
+                        f"teacher {n} is busy with {hit} (the clash is in the aSc file itself)")
+        if room and not room.is_shared:
+            hit = next((busy[("room", room.id, wd)][p] for p in sorted(periods) if p in busy[("room", room.id, wd)]), None)
+            if hit:
+                return f"القاعة {room.name_ar} مشغولة بـ{hit}", f"room {room.name_ar} is taken by {hit}"
         for t in lesson.targets:
             sec = section_of.get(t.section_id)
             allowed = bells.periods(grade_of[sec.grade_id], wd) if sec else None
             if allowed is not None and not periods <= set(allowed):
                 return "الحصة خارج توقيت الصف", "period outside the grade's bell times"
-            for p, gid in class_busy[(t.section_id, wd)]:
+            for p, gid, what in class_busy[(t.section_id, wd)]:
                 if p in periods:
                     same_div = gid and t.group_id and gid != t.group_id and group_div.get(gid) == group_div.get(t.group_id)
                     if not same_div:
-                        return "تعارض شعبة", "class clash"
+                        n = names["section"].get(t.section_id, "")
+                        return (f"الشعبة {n} مشغولة بـ{what} (التعارض موجود في ملف aSc نفسه)",
+                                f"section {n} is busy with {what} (the clash is in the aSc file itself)")
         return None
+
+    # ------------------------------------------------------------------ aSc teacher meetings
+    def meetings(self):
+        """aSc 'lessons' without a class (department meetings…) become unavailable times for their teachers,
+        so nothing is scheduled for them while they meet."""
+        from app.models import Availability
+        days = self.school_days()
+        by_lesson = defaultdict(list)
+        for c in self.b.cards:
+            by_lesson[c["lesson"]].append(c)
+        existing = {(a.entity_id, a.weekday_id, a.period_no) for a in db.session.scalars(select(Availability).where(
+            Availability.timetable_id == self.tt.id, Availability.entity_type == "teacher"))}
+        for m in self.b.meetings:
+            teachers = [self.k_teacher[k] for k in m["teachers"] if k in self.k_teacher]
+            subj = self.k_subject.get(m["subject"])
+            name = subj.name_ar if subj else ""
+            slots = [(days[c["day"]].id, c["period"]) for c in by_lesson.get(m["key"], []) if c["day"] < len(days)]
+            for t in teachers:
+                for wd, p in slots:
+                    if (t.id, wd, p) not in existing:
+                        db.session.add(Availability(id=new_id(), timetable_id=self.tt.id, entity_type="teacher",
+                                                    entity_id=t.id, weekday_id=wd, period_no=p, status="unavailable"))
+                        existing.add((t.id, wd, p))
+            self._issue("warning",
+                        f"«{name}» اجتماع بلا شعبة؛ سُجِّلت أوقاته ({len(slots)}) أوقاتَ عدم توفر لمعلميه ({len(teachers)})",
+                        f"'{name}' is a meeting without a class; its times ({len(slots)}) were set as unavailable for its {len(teachers)} teachers",
+                        where="aSc")
 
 
 def run_import(bundle: Bundle, **opts) -> dict:

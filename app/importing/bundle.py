@@ -36,6 +36,7 @@ class Bundle:
     lessons: list[dict] = field(default_factory=list)    # {key, subject, targets: [(section, group|None)], teachers, ppw, duration, room}
     cards: list[dict] = field(default_factory=list)      # {lesson, day, period, duration, room}   (aSc only)
     periods: list[dict] = field(default_factory=list)    # {no, start, end}                        (aSc only)
+    meetings: list[dict] = field(default_factory=list)   # {key, subject, teachers}: no class (aSc teacher meetings)
     days: int = 0                                        # number of days in the aSc week
     # Spreadsheets refer to sections by the names people type; aSc by id.
     by_name: bool = True

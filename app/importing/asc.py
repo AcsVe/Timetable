@@ -62,6 +62,80 @@ def extract_xml(data: bytes, filename: str) -> bytes:
                    message="الملف ليس ملف aSc XML صالحاً", message_en="Not a valid aSc XML file")
 
 
+_DECL = re.compile(rb'^(\s*<\?xml[^>]*encoding=["\'])([^"\']+)(["\'])', re.I)
+
+
+def fix_encoding(xml: bytes) -> bytes:
+    """aSc often declares windows-1252 while the names were typed in Arabic Windows (cp1256).
+    Read as declared, Arabic would come out as 'ÇáãÌãæÚÉ'; switch the declaration when the
+    non-ASCII text is clearly Arabic."""
+    m = _DECL.match(xml)
+    declared = m.group(2).decode("ascii", "replace").lower() if m else "utf-8"
+    if declared not in ("windows-1252", "cp1252", "iso-8859-1", "latin-1", "latin1"):
+        return xml
+    high = bytes(b for b in xml if b >= 0x80)
+    if not high:
+        return xml
+    text = high.decode("cp1256", "replace")
+    arabic = sum(1 for ch in text if "\u0600" <= ch <= "\u06ff")
+    if arabic / len(text) < 0.6:
+        return xml
+    return xml[:m.start(2)] + b"windows-1256" + xml[m.end(2):]
+
+
+def fix_times(b: "Bundle") -> None:
+    """Repair the period times typed in aSc: '1:00' after '12:00' means 13:00, and a time that breaks
+    the order (e.g. period 1 at 18:00 before period 2 at 8:00) is re-estimated from its neighbours."""
+    from datetime import datetime, timedelta
+    ps = [p for p in b.periods if p["start"] and p["end"]]
+    if len(ps) != len(b.periods) or len(ps) < 2:
+        return
+    t = lambda s: datetime.strptime(s, "%H:%M")  # noqa: E731
+    fixed = []
+    prev_start = None
+    for p in ps:
+        st, en = t(p["start"]), t(p["end"])
+        if prev_start and st < prev_start and st.hour < 7:          # 12-hour clock: 1:00 → 13:00
+            st, en = st + timedelta(hours=12), en + timedelta(hours=12) if en.hour < 12 else en
+            fixed.append(p["no"])
+        p["_s"], p["_e"] = st, en
+        prev_start = st if not prev_start or st > prev_start else prev_start
+    durs = sorted((p["_e"] - p["_s"]) for p in ps if p["_e"] > p["_s"])
+    dur = durs[len(durs) // 2] if durs else timedelta(minutes=45)
+    gaps = sorted(ps[i + 1]["_s"] - ps[i]["_e"] for i in range(len(ps) - 1)
+                  if timedelta(0) <= ps[i + 1]["_s"] - ps[i]["_e"] <= timedelta(minutes=40))
+    gap = gaps[len(gaps) // 2] if gaps else timedelta(minutes=5)
+
+    def ok(i):
+        p = ps[i]
+        if p["_e"] <= p["_s"]:
+            return False
+        if i > 0 and p["_s"] < ps[i - 1]["_e"]:
+            return False
+        if i + 1 < len(ps) and p["_e"] > ps[i + 1]["_s"]:
+            return False
+        return True
+    for _ in range(2):
+        for i, p in enumerate(ps):
+            if ok(i):
+                continue
+            nxt_ok = i + 1 < len(ps) and ps[i + 1]["_e"] > ps[i + 1]["_s"]
+            if i == 0 and nxt_ok:
+                p["_s"] = ps[1]["_s"] - gap - dur
+            elif i > 0:
+                p["_s"] = ps[i - 1]["_e"] + gap
+            p["_e"] = p["_s"] + dur
+            if p["no"] not in fixed:
+                fixed.append(p["no"])
+    for p in ps:
+        p["start"], p["end"] = p.pop("_s").strftime("%H:%M"), p.pop("_e").strftime("%H:%M")
+    if fixed:
+        nums = "، ".join(str(n) for n in sorted(fixed))
+        b.warn(f"أوقات بعض الحصص في ملف aSc غير مرتبة فصُحِّحت تقديرياً (الحصص: {nums})؛ راجعها في صفحة توقيت الحصص",
+               f"Some aSc period times were out of order and were estimated (periods: {nums}); check them on the Bell times page",
+               "periods")
+
+
 def _num(v, default=None):
     s = clean(v)
     if not s:
@@ -91,7 +165,7 @@ def split_class_name(name: str) -> tuple[str, str] | None:
 
 
 def parse_asc(data: bytes, filename: str = "") -> Bundle:
-    xml = extract_xml(data, filename)
+    xml = fix_encoding(extract_xml(data, filename))
     if len(xml) > MAX_XML:
         raise ApiError("validation", 413, details={"reason": "file_too_large"})
     try:
@@ -123,6 +197,7 @@ def parse_asc(data: bytes, filename: str = "") -> Bundle:
                "The file has a period 0; periods were renumbered from 1")
     for p in sorted(raw_periods, key=lambda p: p["no"]):
         b.periods.append({**p, "no": p["no"] + offset})
+    fix_times(b)
 
     # days: every daysdef is a bit string ("10000"); the longest defines the week length
     day_defs = {d.get("id"): clean(d.get("days")).split(",") for d in each("daysdef")}
@@ -169,8 +244,12 @@ def parse_asc(data: bytes, filename: str = "") -> Bundle:
         grade_ref = clean(c.get("grade"))
         grade, sec = grade_names.get(grade_ref) or None, n
         if not grade:
-            split = split_class_name(n)
-            grade, sec = split if split else (n, n)
+            lead = re.match(r"^\s*(\d{1,2})(?!\d)", n)
+            if lead:                       # '7CS A', '10 IGSCI A', '12B:Bus' → grade 7 / 10 / 12, section = class name
+                grade = lead.group(1)
+            else:
+                split = split_class_name(n)
+                grade, sec = split if split else (n, n)
         rooms = _ids(c.get("classroomids"))
         b.sections.append({"key": c.get("id"), "stage": None, "grade": grade, "name": sec,
                            "name_en": sec if not HAS_ARABIC.search(sec) else None,
@@ -197,6 +276,9 @@ def parse_asc(data: bytes, filename: str = "") -> Bundle:
         lid = les.get("id")
         classes = _ids(les.get("classids"))
         subject = clean(les.get("subjectid"))
+        if not classes and subject and _ids(les.get("teacherids")):
+            b.meetings.append({"key": lid, "subject": subject, "teachers": _ids(les.get("teacherids"))})
+            continue
         if not classes or not subject:
             b.warn(f"تُجوهِل درس في aSc بلا صف أو مبحث (المعرّف {lid})",
                    f"Skipped an aSc lesson without class or subject (id {lid})", "lessons")
