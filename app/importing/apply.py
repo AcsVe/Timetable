@@ -940,7 +940,7 @@ def recount_students(section_ids) -> None:
 
 
 # Everything the school enters — kept: users, school name/logo, weekdays, settings, audit history.
-WIPE_TABLES = ("student", "substitution", "teacher_absence", "exam_session", "duty_assignment", "occupancy", "card", "lesson_teacher", "lesson_target", "lesson", "availability", "constraint_rule",
+WIPE_TABLES = ("generator_run", "student", "substitution", "teacher_absence", "exam_session", "duty_assignment", "occupancy", "card", "lesson_teacher", "lesson_target", "lesson", "availability", "constraint_rule",
                "timetable", "bell_assignment", "bell_slot", "bell_schedule", "student_group", "division", "section",
                "teacher_stage", "teacher_subject", "subject_room", "user_stage", "teacher", "subject", "room",
                "building", "grade", "stage", "term", "academic_year")

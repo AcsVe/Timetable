@@ -426,7 +426,8 @@ RESOURCES: dict[str, Resource] = {
 
 # Association tables cleaned automatically when a parent is soft-deleted.
 AUTO_CLEAN_TABLES = {"teacher_stage", "teacher_subject", "subject_room", "user_stage"}
-IGNORED_DEPENDENTS = {"occupancy", "bell_slot", "idempotency_key", "notification", "push_subscription", "audit_log"}
+IGNORED_DEPENDENTS = {"occupancy", "bell_slot", "idempotency_key", "notification", "push_subscription", "audit_log",
+                      "generator_run"}
 AUDIT_COLUMNS = {"created_by", "updated_by", "published_by"}
 
 

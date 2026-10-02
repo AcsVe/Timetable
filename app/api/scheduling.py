@@ -421,17 +421,10 @@ def update_card(id_):
 # ---------------------------------------------------------------------------
 # Timetable lifecycle
 # ---------------------------------------------------------------------------
-@api_bp.post("/timetables/<id_>/copy")
-@write_endpoint
-def copy_timetable(id_):
-    require_admin(current_user)
-    src = _get(Timetable, id_)
-    data = request.get_json(silent=True) or {}
-    new = Timetable(id=parse_uuid(data["id"]) if data.get("id") else new_id(), term_id=src.term_id,
-                    name=data.get("name") or f"{src.name} (نسخة)", status="draft",
+def copy_timetable_data(src: Timetable, name: str, term_id=None, new_id_=None) -> tuple[Timetable, dict]:
+    """A draft copy of a timetable (lessons, cards, time-off, rules). Returns (copy, {old card id: new card})."""
+    new = Timetable(id=new_id_ or new_id(), term_id=term_id or src.term_id, name=name, status="draft",
                     cycle_weeks=src.cycle_weeks, based_on_id=src.id)
-    if data.get("term_id"):
-        new.term_id = _ref(Term, data["term_id"], "term_id").id
     db.session.add(new)
     db.session.flush()
     card_map = {}
@@ -458,6 +451,18 @@ def copy_timetable(id_):
     for nc in card_map.values():
         rebuild_occupancy(nc, nc.lesson, new)
     db.session.flush()
+    return new, card_map
+
+
+@api_bp.post("/timetables/<id_>/copy")
+@write_endpoint
+def copy_timetable(id_):
+    require_admin(current_user)
+    src = _get(Timetable, id_)
+    data = request.get_json(silent=True) or {}
+    term_id = _ref(Term, data["term_id"], "term_id").id if data.get("term_id") else None
+    new, card_map = copy_timetable_data(src, data.get("name") or f"{src.name} (نسخة)", term_id,
+                                        parse_uuid(data["id"]) if data.get("id") else None)
     db.session.refresh(new)
     return {**new.to_dict(), "lessons_copied": len({c.lesson_id for c in card_map.values()}),
             "cards_copied": len(card_map)}, 201

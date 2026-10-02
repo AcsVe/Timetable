@@ -35,6 +35,7 @@ class Config:
 
 class TestConfig(Config):
     TESTING = True
+    GENERATOR_MANUAL = True   # tests run the generator themselves (no background thread)
     SQLALCHEMY_DATABASE_URI = _db_url(
         os.environ.get("TEST_DATABASE_URL", "postgresql+psycopg://postgres@/timetable_test?host=/tmp")
     )

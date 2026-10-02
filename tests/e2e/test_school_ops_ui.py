@@ -116,3 +116,19 @@ def test_students_screen_bulk_move_and_mail_page(page):
     page.click("#mail-save")
     expect(page.locator("#toast")).to_contain_text("Tenant ID")
     assert not page.errors
+
+
+def test_generator_runs_in_the_background_and_opens_the_result(page, app):
+    app.config["GENERATOR_MANUAL"] = False
+    try:
+        page.goto(f"{page.base}/#/generate")
+        expect(page.locator(".notice.ok")).to_contain_text("فحص الجدوى")
+        page.select_option("#gen-time", "30")
+        page.click("#gen-start")
+        expect(page.locator("#gen-open")).to_be_visible(timeout=90000)
+        expect(page.locator(".gen-metrics")).to_contain_text("الحصص الموضوعة")
+        page.click("#gen-open")
+        expect(page.locator("#tt-select option:checked")).to_contain_text("مولَّد")
+        assert not page.errors
+    finally:
+        app.config["GENERATOR_MANUAL"] = True
