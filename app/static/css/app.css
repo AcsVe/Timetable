@@ -389,3 +389,10 @@ td.actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .tree-branch { color: var(--muted); }
 .btn.icon { min-width: 30px; padding-inline: 6px; }
 .chip.small { font-size: .72rem; }
+
+/* study plan matrix */
+.plan-matrix th[scope=row] { text-align: start; white-space: nowrap; position: sticky; inset-inline-start: 0; background: var(--panel); z-index: 1; }
+.plan-matrix td.plan-cell { text-align: center; padding: 3px; }
+.plan-matrix td.plan-cell input { width: 3.6em; text-align: center; padding: 4px; }
+.plan-matrix td.plan-cell.dirty { background: #fff8e6; }
+.plan-matrix tfoot td, .plan-matrix tfoot th { border-top: 2px solid var(--line); }

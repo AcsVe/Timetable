@@ -117,6 +117,7 @@ export function listEditor(items, { nested = true, itemLabel = 'عنصر', subLa
   const counter = h('p', { class: 'muted small count' });
   const move = (arr, i, d) => { const j = i + d; if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; draw(); };
   let focusNode = null;   // the item just added gets the cursor
+  let toFocus = null;
   const addAndFocus = (arr, at, node) => { arr.splice(at, 0, node); focusNode = node; draw(); };
   function row(arr, i, node, sub, parent) {
     const input = h('input', {
@@ -130,7 +131,7 @@ export function listEditor(items, { nested = true, itemLabel = 'عنصر', subLa
         addAndFocus(arr, i + 1, sub ? { name: '', orig: null } : { name: '', orig: null, children: [] });
       },
     });
-    if (focusNode === node) { focusNode = null; requestAnimationFrame(() => input.focus()); }
+    if (focusNode === node) { focusNode = null; toFocus = input; }
     const renamed = node.orig !== null && node.name.trim() && node.name.trim() !== node.orig;
     return h('div', { class: `tree-row${sub ? ' sub' : ''}` },
       sub ? h('span', { class: 'tree-branch', 'aria-hidden': 'true' }, '↳') : null,
@@ -160,6 +161,7 @@ export function listEditor(items, { nested = true, itemLabel = 'عنصر', subLa
         addAndFocus(nodes, nodes.length, { name: '', orig: null, children: [] });
       } }, `+ ${t(itemLabel)}`));
     recount();
+    if (toFocus) { toFocus.focus(); toFocus = null; }   // at once, so the first typed letter is not lost
   }
   draw();
   focusNode = null;

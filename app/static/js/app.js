@@ -11,6 +11,7 @@ const ROUTES = {
   reports: () => import('./views/reports.js'),
   loads: () => import('./views/loads.js'),
   meetings: () => import('./views/meetings.js'),
+  curriculum: () => import('./views/curriculum.js'),
   cover: () => import('./views/cover.js'),
   generate: () => import('./views/generate.js'),
   mail: () => import('./views/mail.js'),

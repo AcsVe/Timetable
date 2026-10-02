@@ -6,7 +6,7 @@
  *  - writes are never queued here: offline saves are refused with a clear message.
  * Bump VERSION when static files change.
  */
-const VERSION = '2026.10.02-7';
+const VERSION = '2026.10.02-8';
 const SHELL = `shell-${VERSION}`;
 const FONTS = 'fonts-v1';
 const PRECACHE = [

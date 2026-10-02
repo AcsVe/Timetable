@@ -9,10 +9,10 @@ const ENTITIES = [
   ['stages', 'المراحل'], ['grades', 'الصفوف'], ['sections', 'الشعب'], ['divisions', 'التقسيمات'],
   ['groups', 'المجموعات'], ['subjects', 'المباحث'], ['teachers', 'المعلمون'], ['rooms', 'القاعات'],
   ['bell_schedules', 'قوالب التوقيت'], ['bell_assignments', 'إسناد التوقيت للأيام والصفوف'], ['lessons', 'الدروس'],
-  ['students', 'الطلبة'],
+  ['students', 'الطلبة'], ['curriculum', 'الخطة الدراسية'],
 ];
 const KINDS = [['', 'تحديد تلقائي من العناوين'], ['teachers', 'المعلمون'], ['subjects', 'المباحث'],
-               ['rooms', 'القاعات'], ['sections', 'الشعب'], ['lessons', 'الدروس'], ['students', 'الطلبة']];
+               ['rooms', 'القاعات'], ['sections', 'الشعب'], ['lessons', 'الدروس'], ['students', 'الطلبة'], ['curriculum', 'الخطة الدراسية']];
 const NEW_STAGE = '__new__';
 
 export async function render(root) {

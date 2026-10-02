@@ -79,6 +79,10 @@ def stages_of(obj) -> set[uuid.UUID] | None:
         return stages_of(t) if t else set()
     if isinstance(obj, Substitution):
         return stages_of(db.session.get(Card, obj.card_id))
+    from app.models import CurriculumItem
+    if isinstance(obj, CurriculumItem):
+        g = db.session.get(Grade, obj.grade_id)
+        return {g.stage_id} if g else set()
     if isinstance(obj, (ExamSession, DutyAssignment)):
         return {obj.stage_id} if obj.stage_id else GLOBAL
     return GLOBAL

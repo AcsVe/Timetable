@@ -454,7 +454,7 @@ RESOURCES: dict[str, Resource] = {
 # Association tables cleaned automatically when a parent is soft-deleted.
 AUTO_CLEAN_TABLES = {"teacher_stage", "teacher_subject", "subject_room", "user_stage"}
 IGNORED_DEPENDENTS = {"occupancy", "bell_slot", "idempotency_key", "notification", "push_subscription", "audit_log",
-                      "generator_run"}
+                      "generator_run", "curriculum_item"}
 AUDIT_COLUMNS = {"created_by", "updated_by", "published_by"}
 
 
@@ -678,6 +678,11 @@ def _clean_after_delete(obj) -> None:
             select(Availability).where(Availability.entity_type == kind, Availability.entity_id == obj.id)
         ):
             a.soft_delete()
+    if isinstance(obj, (Grade, Subject)):   # the study plan follows its grade / subject
+        from app.models import CurriculumItem
+        col = CurriculumItem.grade_id if isinstance(obj, Grade) else CurriculumItem.subject_id
+        for it in db.session.scalars(select(CurriculumItem).where(col == obj.id)):
+            it.soft_delete()
     if isinstance(obj, Teacher):   # duty and invigilation lists hold teacher ids without a foreign key
         tid = str(obj.id)
         for d in db.session.scalars(select(DutyAssignment).where(DutyAssignment.teacher_ids.contains([obj.id]))):

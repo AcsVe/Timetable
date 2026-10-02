@@ -16,7 +16,7 @@ from app.importing.text import clean, gender, header_key, norm, split_list, to_i
 
 KIND_LABEL = {"bells": ("التوقيت", "Bell times"), "teachers": ("المعلمون", "Teachers"), "subjects": ("المباحث", "Subjects"),
               "rooms": ("القاعات", "Rooms"), "sections": ("الشعب", "Sections"), "lessons": ("الدروس", "Lessons"),
-              "students": ("الطلبة", "Students")}
+              "students": ("الطلبة", "Students"), "curriculum": ("الخطة الدراسية", "Study plan")}
 
 SHEET_NAMES = {
     "teachers": ["المعلمون", "المعلمين", "معلمون", "المعلمات", "teachers", "staff"],
@@ -26,6 +26,8 @@ SHEET_NAMES = {
     "lessons": ["الدروس", "الحصص", "التوزيع", "توزيع الحصص", "الإسناد", "lessons", "allocation", "cards"],
     "bells": ["التوقيت", "توقيت الحصص", "أوقات الحصص", "الجرس", "bells", "bell times", "periods"],
     "students": ["الطلبة", "الطلاب", "طلبة", "طلاب", "الطالبات", "قوائم الطلبة", "students", "pupils"],
+    "curriculum": ["الخطة الدراسية", "الخطة", "خطة دراسية", "الخطة الدرسية", "توزيع الحصص على المباحث",
+                   "curriculum", "study plan", "plan"],
 }
 
 FIELDS: dict[str, dict[str, list[str]]] = {
@@ -95,6 +97,13 @@ FIELDS: dict[str, dict[str, list[str]]] = {
         "room": ["القاعة المفضلة", "القاعة", "room", "preferred room"],
         "notes": ["ملاحظات", "notes"],
     },
+    "curriculum": {
+        "stage": ["المرحلة", "stage"],
+        "grade": ["الصف", "الصفوف", "grade", "grades"],
+        "subject": ["المبحث", "المادة", "المباحث", "subject"],
+        "periods": ["الحصص", "عدد الحصص", "الحصص الأسبوعية", "الحصص أسبوعيا", "حصص", "periods", "periods per week"],
+        "duration": ["المدة", "مدة الحصة", "duration"],
+    },
     "bells": {
         "template": ["القالب", "اسم القالب", "قالب التوقيت", "template", "schedule"],
         "days": ["الأيام", "اليوم", "days", "day"],
@@ -107,7 +116,8 @@ FIELDS: dict[str, dict[str, list[str]]] = {
 _ALIASES = {kind: {header_key(a): f for f, al in fs.items() for a in al} for kind, fs in FIELDS.items()}
 _SHEETS = {header_key(n): k for k, ns in SHEET_NAMES.items() for n in ns}
 REQUIRED = {"bells": {"template", "period", "start", "end"}, "teachers": {"name"}, "subjects": {"name"}, "rooms": {"name"}, "sections": {"grade", "name"},
-            "lessons": {"subject", "sections", "ppw"}, "students": {"name", "section"}}
+            "lessons": {"subject", "sections", "ppw"}, "students": {"name", "section"},
+            "curriculum": {"grade", "subject", "periods"}}
 
 
 def _find_header(rows: list[list], kind: str | None):
@@ -251,6 +261,21 @@ def _add_lesson(b, rec, where, n):
 BREAK_WORDS = {"استراحه", "الاستراحه", "فرصه", "الفرصه", "فسحه", "الفسحه", "break", "recess", "استراحة"}
 
 
+def _add_curriculum(b, rec, where, n):
+    grades = split_list(rec.get("grade"))
+    subject = clean(rec.get("subject"))
+    if not grades or not subject:
+        return b.error("الصف والمبحث مطلوبان", "Grade and subject are required", where, n)
+    p = to_int(rec.get("periods"))
+    if p is None or not 0 <= p <= 40:
+        raise ValueError(clean(rec.get("periods")))
+    d = to_int(rec.get("duration")) or 1
+    if not 1 <= d <= 4:
+        raise ValueError(clean(rec.get("duration")))
+    b.curriculum.append({"stage": clean(rec.get("stage")) or None, "grades": grades, "subject": subject,
+                         "periods": p, "duration": d, "where": where, "row": n})
+
+
 def _add_bell(b, rec, where, n):
     from app.importing.text import time_text
     name = clean(rec.get("template"))
@@ -274,7 +299,7 @@ def _add_bell(b, rec, where, n):
     tpl["slots"].append({"kind": kind, "no": no, "start": start, "end": end, "row": n, "where": where})
 
 
-_ADD = {"bells": _add_bell, "teachers": _add_teacher, "subjects": _add_subject, "rooms": _add_room, "sections": _add_section,
+_ADD = {"curriculum": _add_curriculum, "bells": _add_bell, "teachers": _add_teacher, "subjects": _add_subject, "rooms": _add_room, "sections": _add_section,
         "lessons": _add_lesson, "students": _add_student}
 
 
@@ -287,7 +312,7 @@ def parse_xlsx(data: bytes, kind: str | None = None) -> Bundle:
                        message="تعذّر فتح ملف Excel؛ احفظه بصيغة ‎.xlsx وأعد المحاولة",
                        message_en="Could not open the Excel file; save it as .xlsx and try again")
     b = Bundle(source="xlsx")
-    order = ["subjects", "rooms", "teachers", "sections", "students", "lessons", "bells"]
+    order = ["subjects", "rooms", "teachers", "sections", "students", "lessons", "bells", "curriculum"]
     sheets = []
     for ws in wb.worksheets:
         if ws.sheet_state != "visible" or header_key(ws.title) in {header_key("تعليمات"), "instructions"}:

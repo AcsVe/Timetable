@@ -171,6 +171,11 @@ def validate_timetable(tt: Timetable) -> dict:
                    f"Section {label}: {req} periods required but only {cap} slots per week",
                    section_id=sid, required=req, available=cap)
 
+    # 6. Study plan: every section's subjects against its grade's plan (only grades that have a plan)
+    from app.rules.curriculum import issues_for_validation
+    for it in issues_for_validation(tt):
+        _issue(warnings, it.pop("code"), it.pop("message"), it.pop("message_en"), **it)
+
     placed = sum(c.duration for c in cards if c.is_placed)
     total = sum(c.duration for c in cards)
     return {

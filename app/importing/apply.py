@@ -48,7 +48,7 @@ from app.models import (
 from app.models.base import new_id
 
 ENTITIES = ("stages", "grades", "sections", "divisions", "groups", "subjects", "teachers", "rooms",
-            "bell_schedules", "bell_assignments", "lessons", "students")
+            "bell_schedules", "bell_assignments", "lessons", "students", "curriculum")
 MAX_ISSUES = 300
 ASC_STAGE = "مستورد من aSc"
 
@@ -185,6 +185,9 @@ class Importer:
             db.session.flush()
         if b.bells:
             self.bell_sheet()
+            db.session.flush()
+        if b.curriculum:
+            self.curriculum()
             db.session.flush()
         if b.cards and self.tt is not None:
             if not self.skip_asc_bells:
@@ -774,6 +777,48 @@ class Importer:
                         self.stats["bell_assignments"]["unchanged"] += 1
             db.session.flush()
 
+    def curriculum(self):
+        """Study plan sheet: one row per subject and grade (or several grades: «7، 8، 9» or «7-9»).
+        0 periods removes the subject from those grades' plan."""
+        from app.models import CurriculumItem
+        existing = {(r.grade_id, r.subject_id): r for r in db.session.scalars(select(CurriculumItem))}
+        for rec in self.b.curriculum:
+            subj = self.find_subject(rec["subject"]) or self.subject(rec["subject"], {})
+            db.session.flush()
+            grades, missing = [], []
+            stage = self.i_stage.get(norm(rec["stage"])) if rec.get("stage") else None
+            for tok in rec["grades"]:
+                rng = re.fullmatch(r"\s*(\d+)\s*[-–—]\s*(\d+)\s*", tok.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")))
+                for t_ in ([str(n) for n in range(int(rng.group(1)), int(rng.group(2)) + 1)] if rng else [tok]):
+                    found = [g for g in self.grades if (stage is None or g.stage_id == stage.id) and (
+                        norm(t_) in (norm(g.name_ar), norm(g.name_en))
+                        or (t_.strip().isdigit() and int(t_) in (grade_number(g.name_ar), grade_number(g.name_en or ""))))]
+                    if not found:
+                        missing.append(t_)
+                    grades += [g for g in found if g not in grades]
+            if missing:
+                self._issue("warning", f"الخطة الدراسية: الصفوف ({'، '.join(missing)}) غير موجودة", 
+                            f"Study plan: grades ({', '.join(missing)}) not found", rec)
+            for g in grades:
+                row = existing.get((g.id, subj.id))
+                if not rec["periods"]:
+                    if row is not None:
+                        row.soft_delete()
+                        existing.pop((g.id, subj.id))
+                        self.stats["curriculum"]["updated"] += 1
+                    continue
+                if row is None:
+                    row = CurriculumItem(id=new_id(), grade_id=g.id, subject_id=subj.id,
+                                         periods_per_week=rec["periods"], duration=rec["duration"])
+                    db.session.add(row)
+                    existing[(g.id, subj.id)] = row
+                    self.stats["curriculum"]["created"] += 1
+                elif (row.periods_per_week, row.duration) != (rec["periods"], rec["duration"]):
+                    row.periods_per_week, row.duration = rec["periods"], rec["duration"]
+                    self.stats["curriculum"]["updated"] += 1
+                else:
+                    self.stats["curriculum"]["unchanged"] += 1
+
     def place_cards(self):
         from app.rules.bells import BellCache
         tt = self.tt
@@ -958,7 +1003,7 @@ def recount_students(section_ids) -> None:
 
 
 # Everything the school enters — kept: users, school name/logo, weekdays, settings, audit history.
-WIPE_TABLES = ("generator_run", "student", "substitution", "teacher_absence", "exam_session", "duty_assignment", "occupancy", "card", "lesson_teacher", "lesson_target", "lesson", "availability", "constraint_rule",
+WIPE_TABLES = ("generator_run", "curriculum_item", "student", "substitution", "teacher_absence", "exam_session", "duty_assignment", "occupancy", "card", "lesson_teacher", "lesson_target", "lesson", "availability", "constraint_rule",
                "timetable", "bell_assignment", "bell_slot", "bell_schedule", "student_group", "division", "section",
                "teacher_stage", "teacher_subject", "subject_room", "user_stage", "teacher", "subject", "room",
                "building", "grade", "stage", "term", "academic_year")

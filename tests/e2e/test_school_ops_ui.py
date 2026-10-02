@@ -193,3 +193,24 @@ def test_meeting_from_its_page_shows_in_the_teacher_grid(page):
     page.select_option("#report-kind", "meetings")
     expect(page.locator(".report-preview")).to_contain_text("اجتماع رؤساء الأقسام")
     assert not page.errors
+
+
+def test_study_plan_matrix_check_and_create_missing_lessons(page):
+    page.goto(f"{page.base}/#/curriculum")
+    rows = page.locator(".plan-matrix tbody tr")
+    expect(rows.first).to_be_visible()
+    n = rows.count()
+    for i in range(n):                             # the first grade: 2 periods of every subject
+        cell = rows.nth(i).locator("input").first
+        cell.fill("2")
+        cell.press("Tab")                          # moving on keeps the focus (no redraw)
+    expect(page.locator("#plan-save")).to_contain_text(f"({n})")
+    page.click("#plan-save")
+    expect(page.locator("#toast")).to_contain_text("تم الحفظ")
+    expect(page.locator("#plan-apply-all")).to_be_visible()      # the check reloads after saving
+    expect(page.locator(".stats")).to_contain_text("غير موجود")
+    page.click("#plan-apply-all")
+    expect(page.locator("#toast")).to_contain_text("دروس جديدة")
+    page.goto(f"{page.base}/#/validate")
+    expect(page.locator("body")).to_be_visible()
+    assert not page.errors

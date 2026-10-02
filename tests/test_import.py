@@ -167,7 +167,7 @@ def test_template_downloads_and_imports_as_is(base, ctx):
     r = base.get("/api/import/template.xlsx")
     assert r.status_code == 200
     wb = load_workbook(io.BytesIO(r.data))
-    assert wb.sheetnames == ["تعليمات", "المباحث", "القاعات", "المعلمون", "الشعب", "الطلبة", "التوقيت", "الدروس"]
+    assert wb.sheetnames == ["تعليمات", "المباحث", "القاعات", "المعلمون", "الشعب", "الطلبة", "التوقيت", "الخطة الدراسية", "الدروس"]
     rep = upload(base, "/api/import/commit", r.data, "قالب.xlsx", new_timetable_name="تجربة").get_json()
     assert rep["error_count"] == 0, rep["errors"]
     s = rep["summary"]
