@@ -9,9 +9,10 @@ const ENTITIES = [
   ['stages', 'المراحل'], ['grades', 'الصفوف'], ['sections', 'الشعب'], ['divisions', 'التقسيمات'],
   ['groups', 'المجموعات'], ['subjects', 'المباحث'], ['teachers', 'المعلمون'], ['rooms', 'القاعات'],
   ['bell_schedules', 'قوالب التوقيت'], ['bell_assignments', 'إسناد التوقيت للأيام والصفوف'], ['lessons', 'الدروس'],
+  ['students', 'الطلبة'],
 ];
 const KINDS = [['', 'تحديد تلقائي من العناوين'], ['teachers', 'المعلمون'], ['subjects', 'المباحث'],
-               ['rooms', 'القاعات'], ['sections', 'الشعب'], ['lessons', 'الدروس']];
+               ['rooms', 'القاعات'], ['sections', 'الشعب'], ['lessons', 'الدروس'], ['students', 'الطلبة']];
 const NEW_STAGE = '__new__';
 
 export async function render(root) {
@@ -177,7 +178,7 @@ export async function render(root) {
       h('details', { class: 'more' },
         h('summary', {}, t('خيارات إضافية (اختيارية)')),
         h('div', { class: 'toolbar' },
-          h('label', { class: 'inline' }, `${t('المرحلة للشعب التي لم تُحدَّد مرحلتها')}:`, stageSel), stageName),
+          h('label', { class: 'inline' }, `${t('المرحلة للشعب والمعلمين والطلبة الذين لم تُحدَّد مرحلتهم')}:`, stageSel), stageName),
         h('fieldset', { class: 'plain' },
           h('legend', {}, t('الدروس والحصص تُستورد إلى')),
           h('label', { class: 'inline' }, destNew, t('جدول جديد باسم'), ttName),
@@ -188,7 +189,9 @@ export async function render(root) {
         h('ul', { class: 'small' },
           h('li', {}, t('aSc Timetables: صدِّر من البرنامج عبر: ملف ← تصدير ← aSc Timetables XML، وارفع ملف ‎.xml. ويُقبل ملف ‎.roz إذا كان بصيغة XML.')),
           h('li', {}, t('Excel ‏(‎.xlsx): استخدم القالب الجاهز؛ لكل نوع من البيانات ورقة مستقلة.')),
-          h('li', {}, t('CSV: جدول واحد بالعناوين نفسها، ويُقبل الترميز UTF-8 وترميز ويندوز العربي.'))),
+          h('li', {}, t('CSV: جدول واحد بالعناوين نفسها، ويُقبل الترميز UTF-8 وترميز ويندوز العربي.')),
+          h('li', {}, t('الطلبة: ورقة «الطلبة» في القالب، أو قائمة مصدَّرة من نظام آخر فيها: اسم الطالب، والصف، والشعبة (ويُفضَّل رقم الطالب والجنس). تُنشأ المراحل والصفوف والشعب الناقصة تلقائياً.')),
+          h('li', {}, t('المعلمون حسب المراحل والشعب: أعمدة «المراحل» و«الشعب» و«مربي الشعبة» في ورقة «المعلمون».'))),
         h('a', { class: 'btn ghost small', href: '/api/import/template.xlsx', download: '' }, t('تنزيل قالب Excel')))),
     result);
 }

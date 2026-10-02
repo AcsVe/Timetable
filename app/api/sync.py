@@ -68,6 +68,7 @@ def list_settings():
     rows = db.session.scalars(q).all()
     if current_user.role != "admin":
         rows = [r for r in rows if r.key in PUBLIC_SETTINGS or r.key.startswith(PUBLIC_PREFIXES)]
+    rows = [r for r in rows if not r.key.startswith("mail:")]   # secrets: only through /api/mail/settings
     return jsonify({r.key: r.value for r in rows})
 
 
@@ -75,6 +76,8 @@ def list_settings():
 @write_endpoint
 def put_setting(key):
     require_admin(current_user)
+    if key.startswith("mail:"):
+        raise ApiError("validation", 400, details={"field": "key", "reason": "use /api/mail/settings"})
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or "value" not in data:
         raise ApiError("validation", 400, details={"field": "value"})

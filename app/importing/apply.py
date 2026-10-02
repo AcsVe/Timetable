@@ -37,6 +37,7 @@ from app.models import (
     Room,
     Section,
     Stage,
+    Student,
     StudentGroup,
     Subject,
     Teacher,
@@ -47,7 +48,7 @@ from app.models import (
 from app.models.base import new_id
 
 ENTITIES = ("stages", "grades", "sections", "divisions", "groups", "subjects", "teachers", "rooms",
-            "bell_schedules", "bell_assignments", "lessons")
+            "bell_schedules", "bell_assignments", "lessons", "students")
 MAX_ISSUES = 300
 ASC_STAGE = "مستورد من aSc"
 
@@ -144,11 +145,19 @@ class Importer:
                 st = self.stage(stname)
                 if st not in obj.stages:
                     obj.stages.append(st)
+            if not t.get("stages") and (self.stage_id or self.stage_name) and b.by_name:
+                st = self.default_stage(t)   # the stage chosen before importing
+                if st is not None and st not in obj.stages:
+                    obj.stages.append(st)
         for s in b.sections:
             sec = self.section_row(s)
             if sec is not None:
                 self.k_section[s["key"]] = sec
         db.session.flush()
+        self.teacher_sections()
+        if b.students:
+            self.students()
+            db.session.flush()
         for d in b.divisions:
             self.division(d)
         if b.lessons:
@@ -311,6 +320,112 @@ class Importer:
         vals = {"name_en": s.get("name_en"), "student_count": s.get("student_count"),
                 "class_teacher_id": teacher.id if teacher else None, "home_room_id": room.id if room else None}
         return self._upsert("sections", obj, vals, created, f"{g.name_ar} / {s['name']}")
+
+    # ------------------------------------------------------------------ teachers ↔ sections, students
+    def find_section(self, text_: str, stage: str | None = None, grade: str | None = None, rec=None,
+                     create: bool = False) -> Section | None:
+        """«السابع / أ», or a grade + section name. Creates the stage / grade / section when `create`."""
+        g_name, s_name = grade, text_
+        if not g_name and "/" in text_:
+            g_name, s_name = (x.strip() for x in text_.rsplit("/", 1))
+        if not g_name:
+            return None
+        if create:
+            key = (norm(stage or ""), norm(g_name), norm(s_name))
+            cache = self.__dict__.setdefault("_sec_cache", {})
+            if key not in cache:
+                cache[key] = self.section_row({"stage": stage, "grade": g_name, "name": s_name,
+                                               "row": (rec or {}).get("row"), "where": (rec or {}).get("where")})
+            return cache[key]
+        gk, sk = norm(g_name), norm(s_name)
+        grades = [g for g in self.grades if gk in (norm(g.name_ar), norm(g.name_en))]
+        if stage:
+            st = self.i_stage.get(norm(stage))
+            grades = [g for g in grades if st and g.stage_id == st.id]
+        secs = [x for x in self.sections if x.grade_id in {g.id for g in grades} and sk in (norm(x.name_ar), norm(x.name_en))]
+        return secs[0] if len(secs) == 1 else None
+
+    def teacher_sections(self):
+        """Teachers sheet: «الشعب» adds the stages of those sections to the teacher; «مربي الشعبة» sets the class teacher."""
+        for t in self.b.teachers:
+            obj = self.k_teacher.get(t["key"])
+            if obj is None:
+                continue
+            for tok in t.get("sections") or []:
+                sec = self.find_section(tok, rec=t)
+                if sec is None:
+                    self._issue("warning", f"الشعبة «{tok}» للمعلم «{t['name']}» غير موجودة؛ اكتبها بصيغة «الصف / الشعبة»",
+                                f"Section '{tok}' of teacher '{t['name']}' not found; write it as 'Grade / Section'", t)
+                    continue
+                st = next((x for x in self.stages if x.id == next(g.stage_id for g in self.grades if g.id == sec.grade_id)), None)
+                if st is not None and st not in obj.stages:
+                    obj.stages.append(st)
+            if t.get("class_of"):
+                sec = self.find_section(t["class_of"], rec=t)
+                if sec is None:
+                    self._issue("warning", f"شعبة «{t['class_of']}» التي يربّيها «{t['name']}» غير موجودة",
+                                f"Class '{t['class_of']}' of '{t['name']}' not found", t)
+                elif sec.class_teacher_id != obj.id:
+                    sec.class_teacher_id = obj.id
+
+    GENDER_GROUPS = {"m": {"بنين", "اولاد", "ذكور", "طلاب", "boys", "male"}, "f": {"بنات", "اناث", "طالبات", "girls", "female"}}
+
+    def students(self):
+        existing = list(db.session.scalars(select(Student)))
+        by_no = {x.student_no: x for x in existing if x.student_no}
+        by_sec_name = {(x.section_id, norm(x.name_ar)): x for x in existing}
+        touched: set = set()
+        seen_no: set = set()
+        for r in self.b.students:
+            sec = self.find_section(r["section"], r.get("stage"), r["grade"], r, create=True)
+            if sec is None:
+                continue
+            db.session.flush()
+            if r["no"] and r["no"] in seen_no:
+                self._issue("error", f"رقم الطالب «{r['no']}» مكرر في الملف", f"Student number '{r['no']}' repeated in the file", r)
+                continue
+            if r["no"]:
+                seen_no.add(r["no"])
+            obj = (by_no.get(r["no"]) if r["no"] else None) or by_sec_name.get((sec.id, norm(r["name"])))
+            created = obj is None
+            if created:
+                obj = Student(id=new_id(), section_id=sec.id, name_ar=r["name"], group_ids=[])
+            if not created and obj.section_id != sec.id:
+                touched.add(obj.section_id)
+            touched.add(sec.id)
+            groups = list(obj.group_ids or []) if obj.section_id == sec.id else []
+            sec_divs = [d for d in self.divisions if d.section_id == sec.id]
+            sec_groups = [g for g in self.groups if g.division_id in {d.id for d in sec_divs}]
+            for gname in r.get("groups") or []:
+                grp = next((g for g in sec_groups if norm(g.name_ar) == norm(gname)), None)
+                if grp is None:
+                    self._issue("warning", f"المجموعة «{gname}» غير موجودة في شعبة الطالب «{r['name']}»",
+                                f"Group '{gname}' not found in the section of '{r['name']}'", r)
+                elif grp.id not in groups:
+                    groups = [x for x in groups if next((g.division_id for g in sec_groups if g.id == x), None) != grp.division_id]
+                    groups.append(grp.id)
+            gender_ = r.get("gender") or obj.gender
+            if not r.get("groups") and gender_:
+                for d in sec_divs:   # boys / girls divisions are filled from the gender
+                    if any(next((g.division_id for g in sec_groups if g.id == x), None) == d.id for x in groups):
+                        continue
+                    grp = next((g for g in sec_groups if g.division_id == d.id
+                                and norm(g.name_ar) in {norm(w) for w in self.GENDER_GROUPS[gender_]}), None)
+                    if grp is not None:
+                        groups.append(grp.id)
+            vals = {"section_id": sec.id, "student_no": r["no"], "name_ar": r["name"], "name_en": r.get("name_en"),
+                    "gender": r.get("gender"), "guardian_phone": r.get("phone"), "email": r.get("email"),
+                    "notes": r.get("notes")}
+            if list(obj.group_ids or []) != groups:
+                obj.group_ids = groups
+                if not created:
+                    vals["is_active"] = True
+            self._upsert("students", obj, vals, created, r["name"])
+            if r["no"]:
+                by_no[r["no"]] = obj
+            by_sec_name[(sec.id, norm(r["name"]))] = obj
+        db.session.flush()
+        recount_students(touched)
 
     def division(self, d: dict):
         sec = self.k_section.get(d["section"])
@@ -801,8 +916,31 @@ class Importer:
                         where="aSc")
 
 
+def recount_students(section_ids) -> None:
+    """Section and group student counts follow the student list (when a section has students)."""
+    from sqlalchemy import func
+    ids = {x for x in section_ids if x}
+    if not ids:
+        return
+    counts = dict(db.session.execute(select(Student.section_id, func.count()).where(
+        Student.section_id.in_(ids), Student.deleted_at.is_(None), Student.is_active.is_(True))
+        .group_by(Student.section_id)).all())
+    for sec in db.session.scalars(select(Section).where(Section.id.in_(ids))):
+        n = counts.get(sec.id, 0)
+        if n and sec.student_count != n:
+            sec.student_count = n
+    groups = list(db.session.scalars(select(StudentGroup).join(Division, StudentGroup.division_id == Division.id)
+                                     .where(Division.section_id.in_(ids))))
+    if groups:
+        students = list(db.session.scalars(select(Student).where(Student.section_id.in_(ids), Student.is_active.is_(True))))
+        for g in groups:
+            n = sum(1 for st in students if g.id in (st.group_ids or []))
+            if n and g.student_count != n:
+                g.student_count = n
+
+
 # Everything the school enters — kept: users, school name/logo, weekdays, settings, audit history.
-WIPE_TABLES = ("substitution", "teacher_absence", "exam_session", "duty_assignment", "occupancy", "card", "lesson_teacher", "lesson_target", "lesson", "availability", "constraint_rule",
+WIPE_TABLES = ("student", "substitution", "teacher_absence", "exam_session", "duty_assignment", "occupancy", "card", "lesson_teacher", "lesson_target", "lesson", "availability", "constraint_rule",
                "timetable", "bell_assignment", "bell_slot", "bell_schedule", "student_group", "division", "section",
                "teacher_stage", "teacher_subject", "subject_room", "user_stage", "teacher", "subject", "room",
                "building", "grade", "stage", "term", "academic_year")

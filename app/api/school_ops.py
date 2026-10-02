@@ -103,3 +103,56 @@ def copy_exams():
         n += 1
     db.session.flush()
     return {"copied": n}, 200
+
+
+def _notify(messages, kind, title, title_en, url, data):
+    from app.notify.deliver import deliver
+    out = deliver(messages, kind=kind, title=title, title_en=title_en, url=url,
+                  email=data.get("email", True) is not False, in_app=data.get("in_app", True) is not False)
+    out["messages"] = messages
+    return out
+
+
+@api_bp.post("/exam-sessions/notify")
+@write_endpoint
+def notify_invigilators():
+    """Send each invigilator their exam timetable for a term (optionally between two dates)."""
+    from datetime import date as _d
+    from app.rules.school_ops import exam_messages
+    data = request.get_json(silent=True) or {}
+    term = _term(data.get("term_id"))
+    try:
+        d0 = _d.fromisoformat(data["date_from"]) if data.get("date_from") else None
+        d1 = _d.fromisoformat(data["date_to"]) if data.get("date_to") else None
+    except ValueError:
+        raise ApiError("validation", 400, details={"field": "date_from"})
+    wanted = {str(x) for x in data.get("teacher_ids") or []} or None
+    msgs = exam_messages(term.id, d0, d1, wanted)
+    return _notify(msgs, "exams", f"مواعيد المراقبة على الامتحانات — {term.name_ar}",
+                   f"Invigilation schedule — {term.name_en or term.name_ar}", "#/exams", data), 200
+
+
+@api_bp.post("/duty-assignments/notify")
+@write_endpoint
+def notify_duty_teachers():
+    from app.rules.school_ops import duty_messages
+    data = request.get_json(silent=True) or {}
+    term = _term(data.get("term_id"))
+    wanted = {str(x) for x in data.get("teacher_ids") or []} or None
+    msgs = duty_messages(term.id, wanted)
+    return _notify(msgs, "duties", f"جدول المناوبة — {term.name_ar}", f"Duty roster — {term.name_en or term.name_ar}",
+                   "#/duties", data), 200
+
+
+@api_bp.get("/school-ops/messages")
+@login_required
+def school_ops_messages():
+    """Preview the messages before sending: ?what=exams|duties&term_id=…"""
+    from app.rules.school_ops import duty_messages, exam_messages
+    term = _term(request.args.get("term_id"))
+    what = request.args.get("what")
+    if what == "exams":
+        return jsonify({"messages": exam_messages(term.id)})
+    if what == "duties":
+        return jsonify({"messages": duty_messages(term.id)})
+    raise ApiError("validation", 400, details={"field": "what"})

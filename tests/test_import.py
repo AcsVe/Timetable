@@ -167,14 +167,16 @@ def test_template_downloads_and_imports_as_is(base, ctx):
     r = base.get("/api/import/template.xlsx")
     assert r.status_code == 200
     wb = load_workbook(io.BytesIO(r.data))
-    assert wb.sheetnames == ["تعليمات", "المباحث", "القاعات", "المعلمون", "الشعب", "التوقيت", "الدروس"]
+    assert wb.sheetnames == ["تعليمات", "المباحث", "القاعات", "المعلمون", "الشعب", "الطلبة", "التوقيت", "الدروس"]
     rep = upload(base, "/api/import/commit", r.data, "قالب.xlsx", new_timetable_name="تجربة").get_json()
     assert rep["error_count"] == 0, rep["errors"]
     s = rep["summary"]
     assert (s["subjects"]["created"], s["rooms"]["created"], s["teachers"]["created"], s["sections"]["created"],
-            s["lessons"]["created"]) == (2, 2, 2, 2, 2)
+            s["lessons"]["created"], s["students"]["created"]) == (2, 2, 2, 2, 2, 2)
     ahmad = ctx.query(Teacher).filter_by(name_ar="أحمد محمود").one()
     assert ahmad.gender == "m" and ahmad.target_weekly_periods == 24 and [x.name_ar for x in ahmad.stages] == ["المرحلة الأساسية"]
+    seventh_a = ctx.query(Section).filter_by(name_ar="أ").one()
+    assert seventh_a.class_teacher_id == ahmad.id and seventh_a.student_count == 2
     math = ctx.query(Lesson).join(Subject).filter(Subject.name_ar == "الرياضيات").one()
     assert len(math.targets) == 2 and math.periods_per_week == 5
     pe = ctx.query(Lesson).join(Subject).filter(Subject.name_ar == "التربية الرياضية").one()

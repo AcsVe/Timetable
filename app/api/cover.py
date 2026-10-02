@@ -114,27 +114,28 @@ def cover_messages(tt_id):
 @api_bp.post("/timetables/<tt_id>/cover/notify")
 @write_endpoint
 def cover_notify(tt_id):
-    """Mark the day's covers as notified and put a notification in the inbox of every substitute who
-    has a user account (teacher → linked user)."""
+    """E-mail every substitute of the day (Microsoft Graph), put a notice in the inbox of those with a
+    user account, and mark the day's covers as notified."""
+    from app.notify.deliver import deliver
     tt = _tt(tt_id)
     data = request.get_json(silent=True) or {}
     d = _date(data.get("date"))
     day = CoverDay(tt, d)
     msgs = day.messages()
-    sent = 0
-    for m in msgs:
-        if m["user_id"]:
-            db.session.add(Notification(user_id=parse_uuid(m["user_id"]), kind="cover",
-                                        title_ar=f"حصص إشغال يوم {d.isoformat()}", title_en=f"Cover on {d.isoformat()}",
-                                        body={"text": m["text"], "date": d.isoformat(), "count": m["count"]},
-                                        url=f"#/cover?date={d.isoformat()}"))
-            sent += 1
+    if data.get("teacher_ids"):
+        wanted = {str(x) for x in data["teacher_ids"]}
+        msgs = [m for m in msgs if m["teacher_id"] in wanted]
+    out = deliver(msgs, kind="cover", title=f"حصص إشغال يوم {day.weekday.name_ar if day.weekday else ''} {d.isoformat()}".replace("  ", " "),
+                  title_en=f"Cover on {d.isoformat()}", url=f"#/cover?date={d.isoformat()}",
+                  email=data.get("email", True) is not False, in_app=data.get("in_app", True) is not False)
+    ok = {r["teacher_id"] for r in out["results"] if r["email_status"] == "sent" or r["in_app"]}
     now = utcnow()
     for s in day.subs:
-        if s.kind == "cover" and s.notified_at is None and s.deleted_at is None:
+        if s.kind == "cover" and s.notified_at is None and s.deleted_at is None and str(s.substitute_teacher_id) in ok:
             s.notified_at = now
     db.session.flush()
-    return {"teachers": len(msgs), "in_app": sent, "messages": msgs}, 200
+    out["messages"] = msgs
+    return out, 200
 
 
 # ---------------------------------------------------------------------------

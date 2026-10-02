@@ -8,7 +8,7 @@ from datetime import time
 
 from sqlalchemy import select
 
-from app.arabic import g, teacher_title
+from app.arabic import count, g, teacher_title
 from app.extensions import db
 from app.models import Card, DutyAssignment, ExamSession, Lesson, Room, Section, Subject, Teacher, Timetable, Weekday
 from app.rules.bells import resolve_schedule
@@ -194,3 +194,61 @@ def check_duties(term_id: uuid.UUID, tt: Timetable | None) -> list[dict]:
                    f"{' يوم ' + day_name[d.weekday_id] if d.weekday_id in day_name else ''}: لم يُحدَّد لها معلم",
                    f"Duty {d.duty_type}{' — ' + d.location if d.location else ''}: no teacher", duty_id=d.id)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Messages to teachers (e-mail / in-app)
+# ---------------------------------------------------------------------------
+_DAYS_AR = ["الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"]
+
+
+def exam_messages(term_id: uuid.UUID, date_from=None, date_to=None, teacher_ids: set | None = None) -> list[dict]:
+    """One message per invigilator: every exam they watch (date, day, session, time, subject, room)."""
+    from app.models import Room
+    rooms = {r.id: r for r in db.session.scalars(select(Room))}
+    subjects = {s.id: s for s in db.session.scalars(select(Subject))}
+    teachers = {t.id: t for t in db.session.scalars(select(Teacher))}
+    per = defaultdict(list)
+    q = select(ExamSession).where(ExamSession.term_id == term_id).order_by(ExamSession.exam_date, ExamSession.starts_at)
+    for e in db.session.scalars(q):
+        if (date_from and e.exam_date < date_from) or (date_to and e.exam_date > date_to):
+            continue
+        for r in e.rooms or []:
+            room = rooms.get(uuid.UUID(r["room_id"])) if r.get("room_id") else None
+            where = " — ".join(x for x in ((room.name_ar if room else ""), r.get("location") or "") if x)
+            for x in r.get("teacher_ids") or []:
+                tid = uuid.UUID(x)
+                if tid not in teachers or (teacher_ids and str(tid) not in teacher_ids):
+                    continue
+                when = " ".join(v for v in (e.session_label or "", _span(e.starts_at, e.ends_at)) if v)
+                per[tid].append(f"• {_DAYS_AR[e.exam_date.weekday()]} {e.exam_date.isoformat()}"
+                                f"{' — ' + when if when else ''}: {exam_label(e, subjects)}{' (' + where + ')' if where else ''}")
+    out = []
+    for tid, lines in per.items():
+        t = teachers[tid]
+        out.append({"teacher_id": str(tid), "name": t.name_ar, "count": len(lines), "phone": t.phone, "email": t.email,
+                    "text": f"{_tname(t)}، السلام عليكم.\n{g(t.gender, 'مواعيد مراقبتك', 'مواعيد مراقبتكِ')} على الامتحانات "
+                            f"({count(len(lines), 'session')}):\n" + "\n".join(lines)})
+    return sorted(out, key=lambda m: m["name"])
+
+
+def duty_messages(term_id: uuid.UUID, teacher_ids: set | None = None) -> list[dict]:
+    """One message per teacher on duty: day, time slot, purpose and place of each duty."""
+    teachers = {t.id: t for t in db.session.scalars(select(Teacher))}
+    days = {d.id: d.name_ar for d in db.session.scalars(select(Weekday))}
+    per = defaultdict(list)
+    for d in db.session.scalars(select(DutyAssignment).where(DutyAssignment.term_id == term_id)
+                                .order_by(DutyAssignment.sort_order, DutyAssignment.starts_at)):
+        day = days.get(d.weekday_id, "كل الأيام") if d.weekday_id else "كل الأيام"
+        when = " ".join(v for v in (d.time_label or "", _span(d.starts_at, d.ends_at)) if v)
+        line = f"• {day}{' — ' + when if when else ''}: {d.duty_type}{' (' + d.location + ')' if d.location else ''}"
+        for tid in d.teacher_ids or []:
+            if tid in teachers and (not teacher_ids or str(tid) in teacher_ids):
+                per[tid].append(line)
+    out = []
+    for tid, lines in per.items():
+        t = teachers[tid]
+        out.append({"teacher_id": str(tid), "name": t.name_ar, "count": len(lines), "phone": t.phone, "email": t.email,
+                    "text": f"{_tname(t)}، السلام عليكم.\n{g(t.gender, 'مناوباتك', 'مناوباتكِ')} في هذا الفصل الدراسي:\n"
+                            + "\n".join(lines)})
+    return sorted(out, key=lambda m: m["name"])

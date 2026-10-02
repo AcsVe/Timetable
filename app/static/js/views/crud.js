@@ -21,6 +21,12 @@ const OPTIONS = {
   'academic-years': async () => (await list('academic-years')).map(o => ({ value: o.id, label: o.name })),
   teachers: async () => [...(await list('teachers'))].sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'ar'))
     .map(o => ({ value: o.id, label: nameOf(o) })),
+  groups: async () => {
+    const [secs, divs, groups] = await Promise.all([sectionOptions(), list('divisions'), list('groups')]);
+    const secLabel = Object.fromEntries(secs.map(x => [x.value, x.label]));
+    const divOf = byId(divs);
+    return groups.map(g => ({ value: g.id, label: `${secLabel[divOf[g.division_id]?.section_id] || ''}: ${nameOf(g)}` }));
+  },
   users: async () => (isAdmin() ? (await list('users')).map(o => ({ value: o.id, label: `${o.display_name} (${o.email})` })) : []),
 };
 
@@ -106,6 +112,22 @@ const CONFIG = {
     { name: 'iso_dow', label: 'اليوم', type: 'select', required: true, options: DOW.map(([v, l]) => ({ value: v, label: l })) },
     { name: 'name_ar', label: 'الاسم (عربي)', required: true }, { name: 'name_en', label: 'الاسم (إنجليزي)' },
     { name: 'sort_order', label: 'الترتيب', type: 'number' }, { name: 'is_school_day', label: 'يوم دراسي', type: 'bool' }] },
+  students: { title: 'الطلبة', filter: 'section_id', fields: [
+    { name: 'student_no', label: 'رقم الطالب', placeholder: '1001' },
+    { name: 'name_ar', label: 'اسم الطالب', required: true, placeholder: 'الاسم الرباعي' },
+    { name: 'name_en', label: 'الاسم (إنجليزي)' },
+    { name: 'gender', label: 'الجنس', type: 'select', options: [{ value: 'm', label: 'ذكر' }, { value: 'f', label: 'أنثى' }] },
+    { name: 'section_id', label: 'الشعبة', type: 'select', ref: 'sections', required: true },
+    { name: 'group_ids', label: 'المجموعات (من تقسيمات الشعبة)', type: 'multi', ref: 'groups' },
+    { name: 'guardian_phone', label: 'هاتف ولي الأمر', placeholder: '07xxxxxxxx' },
+    { name: 'email', label: 'البريد الإلكتروني', type: 'email' },
+    { name: 'notes', label: 'ملاحظات', type: 'textarea' },
+    { name: 'is_active', label: 'على مقاعد الدراسة', type: 'bool' }],
+    columns: ['student_no', 'name_ar', 'gender', 'section_id', 'group_ids', 'guardian_phone'],
+    defaults: { is_active: true },
+    links: [{ label: 'استيراد الطلبة من Excel أو CSV', href: '#/import' },
+            { label: 'طباعة قوائم الطلبة', report: 'student-lists' }],
+    bulkActions: [{ label: 'نقل المحدد إلى شعبة', run: moveStudents }] },
   users: { title: 'المستخدمون', fields: [
     { name: 'display_name', label: 'الاسم', required: true }, { name: 'email', label: 'البريد الإلكتروني', type: 'email', required: true },
     { name: 'role', label: 'الدور', type: 'select', required: true, options: [
@@ -120,6 +142,18 @@ const CONFIG = {
 };
 
 const NUMERIC_SELECT = new Set(['iso_dow']);
+
+async function moveStudents(items) {
+  const opts = await sectionOptions();
+  return openForm({ title: `${t('نقل المحدد إلى شعبة')} (${items.length})`,
+    fields: [{ name: 'section_id', label: t('الشعبة الجديدة'), type: 'select', required: true,
+               options: opts.sort((a, b) => a.sort.localeCompare(b.sort)) }],
+    onSubmit: async v => {
+      const r = await api.post('/api/students/move', { section_id: v.section_id, items: items.map(x => ({ id: x.id, version: x.version })) });
+      toast(`${t('نُقل')}: ${r.moved}`, 'ok');
+      invalidate('students', 'sections', 'groups');
+    } });
+}
 
 function goTo(hash, key, value) {
   sessionStorage.setItem(key, JSON.stringify(value));
@@ -208,6 +242,7 @@ export async function render(root, [res]) {
           h('button', { class: 'btn small ghost', onclick: () => edit(item) }, t('تعديل')), ' ',
           h('button', { class: 'btn small ghost', onclick: () => remove(item) }, t('حذف'))] : null],
       onBulkDelete: canEdit() ? bulkRemove : null,
+      bulkActions: canEdit() ? (cfg.bulkActions || []).map(a => ({ label: t(a.label), run: async items => { await a.run(items); invalidate(res); await draw(); } })) : [],
     });
     table.setQuery(query);
     swap(tableHost, table.el);
@@ -252,7 +287,10 @@ export async function render(root, [res]) {
       h('select', { onchange: e => { filterValue = e.target.value; sessionStorage.setItem(`filter:${res}`, filterValue); draw(); } },
         h('option', { value: '' }, t('الكل')),
         filterField.options.map(o => h('option', { value: o.value, selected: o.value === filterValue }, o.label)))) : null);
-  put(root, h('h1', { class: 'title' }, t(cfg.title)), toolbar, tableHost);
+  const links = (cfg.links || []).map(l => (l.report
+    ? h('a', { class: 'btn ghost small', href: '#/reports', onclick: () => sessionStorage.setItem('reports', JSON.stringify({ kind: l.report })) }, t(l.label))
+    : h('a', { class: 'btn ghost small', href: l.href }, t(l.label))));
+  put(root, h('h1', { class: 'title' }, t(cfg.title)), toolbar, links.length ? h('div', { class: 'toolbar' }, links) : null, tableHost);
   await draw();
 }
 

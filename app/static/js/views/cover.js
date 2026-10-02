@@ -6,6 +6,7 @@ import { lang, t } from '../i18n.js';
 import { byId, canEdit, currentTimetable, isAdmin, list } from '../store.js';
 import { bulkTable, confirmBox, h, nameOf, openForm, put, searchBox, swap, toast, toastError } from '../ui.js';
 import { noTimetable } from './ctx.js';
+import { notifyDialog } from './notify.js';
 import { collectExtra, editModule, extraFields, extraValues, label, loadModule, placeSubFields, title } from './modconf.js';
 
 const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -268,31 +269,8 @@ export async function render(root, _rest, params) {
   async function messages() {
     let r;
     try { r = await api.get(`/api/timetables/${tt.id}/cover/messages?date=${date}`); } catch (e) { toastError(e); return; }
-    const dlg = document.getElementById('modal');
-    const form = document.getElementById('modal-form');
-    form.innerHTML = '';
-    const copy = async text => { try { await navigator.clipboard.writeText(text); toast(t('نُسخ النص'), 'ok'); } catch (_) { toast(t('تعذّر النسخ؛ حدِّد النص وانسخه يدوياً'), 'err'); } };
-    const wa = p => { const d = String(p || '').replace(/\D/g, '').replace(/^0/, '962'); return d.length >= 9 ? d : null; };
-    put(form, h('h2', {}, `${t('رسائل المعلمين البدلاء')} — ${date}`),
-      r.messages.length ? r.messages.map(m => h('div', { class: 'msg-card' },
-        h('div', { class: 'toolbar' }, h('b', {}, m.name),
-          h('button', { type: 'button', class: 'btn small ghost', onclick: () => copy(m.text) }, t('نسخ')),
-          wa(m.phone) ? h('a', { class: 'btn small ghost', target: '_blank', rel: 'noopener', href: `https://wa.me/${wa(m.phone)}?text=${encodeURIComponent(m.text)}` }, t('واتساب')) : null,
-          m.email ? h('a', { class: 'btn small ghost', href: `mailto:${m.email}?subject=${encodeURIComponent(`${t('حصص إشغال')} ${date}`)}&body=${encodeURIComponent(m.text)}` }, t('بريد')) : null,
-          m.user_id ? h('span', { class: 'chip ok' }, t('له حساب في النظام')) : null),
-        h('pre', { class: 'msg-text', dir: 'auto' }, m.text)))
-        : h('p', { class: 'muted' }, t('لا يوجد معلمون بدلاء في هذا اليوم بعد')),
-      h('div', { class: 'modal-actions' },
-        h('button', { class: 'btn ghost', type: 'button', onclick: () => dlg.close() }, t('إغلاق')),
-        r.messages.length && editable ? h('button', { class: 'btn', type: 'button', onclick: async () => {
-          try {
-            const res = await api.post(`/api/timetables/${tt.id}/cover/notify`, { date });
-            toast(`${t('سُجِّل الإبلاغ')}: ${res.teachers} — ${t('إشعار داخل النظام')}: ${res.in_app}`, 'ok');
-            dlg.close(); await load();
-          } catch (e) { toastError(e); }
-        } }, t('تسجيل الإبلاغ وإرسال إشعار داخل النظام')) : null));
-    dlg.onclose = null;
-    dlg.showModal();
+    await notifyDialog({ title: `${t('رسائل المعلمين البدلاء')} — \u2066${date}\u2069`, messages: r.messages, canSend: editable,
+      send: async body => { const res = await api.post(`/api/timetables/${tt.id}/cover/notify`, { date, ...body }); load(); return res; } });
   }
 
   const report = (kind, fmt, extra = '') => {

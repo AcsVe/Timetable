@@ -25,3 +25,11 @@ services:
         value: Asia/Amman
       - key: SEED_DEMO
         value: "0"    # "1" = create a demo school once, only into an empty database
+      - key: MS_TENANT_ID
+        sync: false   # optional: e-mail through Microsoft 365 (can also be set on the «البريد» page)
+      - key: MS_CLIENT_ID
+        sync: false
+      - key: MS_CLIENT_SECRET
+        sync: false
+      - key: MS_MAIL_SENDER
+        sync: false   # e.g. timetable@school.edu.jo

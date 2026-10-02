@@ -123,7 +123,7 @@ def test_messages_notify_and_my_notifications(cov, api):
                                         "original_teacher_id": s["t1"], "kind": "cover", "substitute_teacher_id": s["t_pe_m"]})
     r = a.ok("post", f"/api/timetables/{s['tt']}/cover/notify", {"date": SUNDAY})
     assert r["in_app"] == 1
-    text = r["messages"][0]["text"]
+    text = r["messages"][0]["text"].replace("\u200e", "").replace("\u200f", "")
     assert "لديك حصة واحدة للإشغال يوم الأحد 2027-01-10" in text and "بدلاً من المعلم أحمد" in text
     assert day(s)["needs"][0]["substitution"]["notified_at"]
     a.logout()

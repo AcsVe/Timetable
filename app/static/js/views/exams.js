@@ -4,6 +4,7 @@ import * as api from '../api.js';
 import { lang, t } from '../i18n.js';
 import { byId, canEdit, currentTimetable, isAdmin, list } from '../store.js';
 import { bulkTable, confirmBox, h, multiPicker, nameOf, openForm, put, searchBox, swap, toast, toastError } from '../ui.js';
+import { notifyDialog } from './notify.js';
 import { collectExtra, editModule, extraFields, extraLabel, extraText, extraValues, label, loadModule, placeSubFields, title } from './modconf.js';
 
 const DAY_NAMES = { ar: ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'],
@@ -215,6 +216,13 @@ export async function render(root) {
       h('button', { class: 'btn ghost', onclick: () => report('exam-schedule', 'pdf') }, t('طباعة جدول الامتحانات PDF')),
       h('button', { class: 'btn ghost', onclick: () => report('exam-schedule', 'xlsx') }, t('تصدير Excel')),
       h('button', { class: 'btn ghost', onclick: () => report('invigilation', 'pdf') }, t('جدول المراقبة لكل معلم')),
+      termId ? h('button', { class: 'btn ghost', id: 'notify-invigilators', onclick: async () => {
+        try {
+          const r = await api.get(`/api/school-ops/messages?what=exams&term_id=${termId}`);
+          await notifyDialog({ title: t('إبلاغ المعلمين المراقبين'), messages: r.messages, canSend: canEdit(),
+                               send: body => api.post('/api/exam-sessions/notify', { term_id: termId, ...body }) });
+        } catch (e) { toastError(e); }
+      } }, t('إبلاغ المراقبين')) : null,
       canEdit() && terms.length > 1 ? h('button', { class: 'btn ghost', onclick: copyFrom }, t('نسخ من فصل آخر')) : null,
       isAdmin() ? h('button', { class: 'btn ghost', onclick: async () => {
         if (await editModule(mod, { lists: [

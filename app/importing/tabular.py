@@ -15,7 +15,8 @@ from app.importing.bundle import Bundle
 from app.importing.text import clean, gender, header_key, norm, split_list, to_int
 
 KIND_LABEL = {"bells": ("التوقيت", "Bell times"), "teachers": ("المعلمون", "Teachers"), "subjects": ("المباحث", "Subjects"),
-              "rooms": ("القاعات", "Rooms"), "sections": ("الشعب", "Sections"), "lessons": ("الدروس", "Lessons")}
+              "rooms": ("القاعات", "Rooms"), "sections": ("الشعب", "Sections"), "lessons": ("الدروس", "Lessons"),
+              "students": ("الطلبة", "Students")}
 
 SHEET_NAMES = {
     "teachers": ["المعلمون", "المعلمين", "معلمون", "المعلمات", "teachers", "staff"],
@@ -24,6 +25,7 @@ SHEET_NAMES = {
     "sections": ["الشعب", "الصفوف والشعب", "شعب", "sections", "classes"],
     "lessons": ["الدروس", "الحصص", "التوزيع", "توزيع الحصص", "الإسناد", "lessons", "allocation", "cards"],
     "bells": ["التوقيت", "توقيت الحصص", "أوقات الحصص", "الجرس", "bells", "bell times", "periods"],
+    "students": ["الطلبة", "الطلاب", "طلبة", "طلاب", "الطالبات", "قوائم الطلبة", "students", "pupils"],
 }
 
 FIELDS: dict[str, dict[str, list[str]]] = {
@@ -38,6 +40,23 @@ FIELDS: dict[str, dict[str, list[str]]] = {
         "target": ["النصاب", "النصاب الأسبوعي", "عدد الحصص المطلوبة", "target", "weekly load", "load"],
         "subjects": ["المباحث", "المواد", "subjects"],
         "stages": ["المراحل", "المرحلة", "stages", "stage"],
+        "sections": ["الشعب", "الشعب التي يدرسها", "الصفوف والشعب", "الصفوف", "sections", "classes"],
+        "class_of": ["مربي الشعبة", "مربي الصف", "مربية الصف", "مربي صف", "class teacher of", "homeroom of", "homeroom"],
+    },
+    "students": {
+        "no": ["رقم الطالب", "الرقم المدرسي", "رقم الطالب في المدرسة", "الرقم", "الرقم الوطني", "رقم الهوية",
+               "student no", "student number", "student id", "id"],
+        "name": ["اسم الطالب", "اسم الطالبة", "الطالب", "الطالبة", "الاسم", "الاسم الكامل", "الاسم الرباعي", "name",
+                 "student", "student name", "full name"],
+        "name_en": ["الاسم بالإنجليزية", "الاسم بالانجليزي", "الاسم الإنجليزي", "name en", "english name"],
+        "gender": ["الجنس", "النوع", "gender", "sex"],
+        "stage": ["المرحلة", "stage"],
+        "grade": ["الصف", "grade", "year", "class level"],
+        "section": ["الشعبة", "الصف والشعبة", "الصف / الشعبة", "section", "class", "homeroom"],
+        "groups": ["المجموعة", "المجموعات", "group", "groups"],
+        "phone": ["هاتف ولي الأمر", "رقم ولي الأمر", "جوال ولي الأمر", "الهاتف", "الجوال", "guardian phone", "phone", "mobile"],
+        "email": ["البريد", "البريد الإلكتروني", "email", "e mail"],
+        "notes": ["ملاحظات", "notes"],
     },
     "subjects": {
         "name": ["الاسم", "المبحث", "اسم المبحث", "المادة", "اسم المادة", "name", "subject", "subject name"],
@@ -88,12 +107,12 @@ FIELDS: dict[str, dict[str, list[str]]] = {
 _ALIASES = {kind: {header_key(a): f for f, al in fs.items() for a in al} for kind, fs in FIELDS.items()}
 _SHEETS = {header_key(n): k for k, ns in SHEET_NAMES.items() for n in ns}
 REQUIRED = {"bells": {"template", "period", "start", "end"}, "teachers": {"name"}, "subjects": {"name"}, "rooms": {"name"}, "sections": {"grade", "name"},
-            "lessons": {"subject", "sections", "ppw"}}
+            "lessons": {"subject", "sections", "ppw"}, "students": {"name", "section"}}
 
 
 def _find_header(rows: list[list], kind: str | None):
     """(row index, kind, {col: field}) of the first row that looks like a heading row."""
-    kinds = [kind] if kind else ["bells", "lessons", "sections", "teachers", "subjects", "rooms"]
+    kinds = [kind] if kind else ["bells", "lessons", "students", "sections", "teachers", "subjects", "rooms"]
     best = None
     for i, row in enumerate(rows[:10]):
         keys = [header_key(c) for c in row]
@@ -102,7 +121,7 @@ def _find_header(rows: list[list], kind: str | None):
             fields = set(cols.values())
             if not REQUIRED[k] <= fields:
                 continue
-            score = len(fields) + (5 if k == "lessons" and "ppw" in fields else 0)
+            score = len(fields) + (5 if k == "lessons" and "ppw" in fields else 0) + (2 if k == "students" else 0)
             if best is None or score > best[3]:
                 best = (i, k, cols, score)
         if best:
@@ -149,7 +168,31 @@ def _add_teacher(b, rec, where, n):
                        "short": _opt(rec, "short"), "email": _opt(rec, "email"), "phone": _opt(rec, "phone"),
                        "title": _opt(rec, "title"), "gender": gender(rec.get("gender")),
                        "target": _num_field(rec, "target", where, n, b, 0, 60),
-                       "subjects": split_list(rec.get("subjects")), "stages": split_list(rec.get("stages"))})
+                       "subjects": split_list(rec.get("subjects")), "stages": split_list(rec.get("stages")),
+                       "sections": split_list(rec.get("sections")), "class_of": _opt(rec, "class_of")})
+
+
+def _add_student(b, rec, where, n):
+    from app.importing.text import gender as _gender
+    name, section = clean(rec.get("name")), clean(rec.get("section"))
+    if not name or not section:
+        return b.error("اسم الطالب والشعبة مطلوبان", "Student name and section are required", where, n)
+    grade = _opt(rec, "grade")
+    if not grade and "/" in section:
+        grade, section = (clean(x) for x in section.rsplit("/", 1))
+    if not grade:
+        return b.error(f"حدِّد صف الطالب «{name}» (عمود «الصف» أو اكتب الشعبة بصيغة «السابع / أ»)",
+                       f"Specify the grade of '{name}' (a 'Grade' column or 'Grade / Section')", where, n)
+    try:
+        g = _gender(rec.get("gender"))
+    except ValueError:
+        b.warn(f"قيمة الجنس «{clean(rec.get('gender'))}» غير مفهومة؛ تُركت فارغة", "Gender value not understood; left empty", where, n)
+        g = None
+    no = clean(rec.get("no")) or None
+    b.students.append({"row": n, "where": where, "no": no[:40] if no else None, "name": name, "name_en": _opt(rec, "name_en"),
+                       "gender": g, "stage": _opt(rec, "stage"), "grade": grade, "section": section,
+                       "groups": split_list(rec.get("groups")), "phone": (_opt(rec, "phone") or "")[:30] or None,
+                       "email": _opt(rec, "email"), "notes": _opt(rec, "notes")})
 
 
 def _add_subject(b, rec, where, n):
@@ -232,7 +275,7 @@ def _add_bell(b, rec, where, n):
 
 
 _ADD = {"bells": _add_bell, "teachers": _add_teacher, "subjects": _add_subject, "rooms": _add_room, "sections": _add_section,
-        "lessons": _add_lesson}
+        "lessons": _add_lesson, "students": _add_student}
 
 
 def parse_xlsx(data: bytes, kind: str | None = None) -> Bundle:
@@ -244,7 +287,7 @@ def parse_xlsx(data: bytes, kind: str | None = None) -> Bundle:
                        message="تعذّر فتح ملف Excel؛ احفظه بصيغة ‎.xlsx وأعد المحاولة",
                        message_en="Could not open the Excel file; save it as .xlsx and try again")
     b = Bundle(source="xlsx")
-    order = ["subjects", "rooms", "teachers", "sections", "lessons", "bells"]
+    order = ["subjects", "rooms", "teachers", "sections", "students", "lessons", "bells"]
     sheets = []
     for ws in wb.worksheets:
         if ws.sheet_state != "visible" or header_key(ws.title) in {header_key("تعليمات"), "instructions"}:

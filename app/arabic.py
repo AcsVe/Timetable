@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 # noun -> (singular, dual, plural 3–10); the dual in the genitive/accusative is DUAL_GEN
-DUAL_GEN = {"period": "حصتين", "slot": "خانتين", "gap": "فجوتين", "day": "يومين", "card": "بطاقتين", "teacher": "معلمَين"}
+DUAL_GEN = {"period": "حصتين", "slot": "خانتين", "gap": "فجوتين", "day": "يومين", "card": "بطاقتين", "teacher": "معلمَين",
+            "session": "مراقبتين"}
 NOUNS = {
     "period": ("حصة", "حصتان", "حصص"),
     "slot": ("خانة", "خانتان", "خانات"),
@@ -10,8 +11,9 @@ NOUNS = {
     "day": ("يوم", "يومان", "أيام"),
     "card": ("بطاقة", "بطاقتان", "بطاقات"),
     "teacher": ("معلم", "معلمان", "معلمين"),
+    "session": ("مراقبة", "مراقبتان", "مراقبات"),
 }
-FEMININE = {"period", "slot", "gap", "card"}
+FEMININE = {"period", "slot", "gap", "card", "session"}
 
 
 def count(n: int, noun: str, case: str = "nom") -> str:

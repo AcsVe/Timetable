@@ -95,3 +95,24 @@ def test_absence_then_fair_automatic_cover(page):
     expect(page.locator(".msg-text")).to_contain_text("للإشغال")
     assert "null" not in page.locator("#modal-form").inner_text()
     assert not page.errors
+
+
+def test_students_screen_bulk_move_and_mail_page(page):
+    page.goto(f"{page.base}/#/setup/students")
+    for name in ("أمل", "باسل"):
+        page.click("text=+ إضافة")
+        page.fill("#f-name_ar", name)
+        page.select_option("#f-section_id", index=1)
+        page.click("#modal-form button[type=submit]")
+        expect(page.locator("table.data")).to_contain_text(name)
+    page.locator("table.data thead input[type=checkbox]").check()
+    page.click("text=نقل المحدد إلى شعبة")
+    page.select_option("#f-section_id", index=2)
+    page.click("#modal-form button[type=submit]")
+    expect(page.locator("#toast")).to_contain_text("نُقل: 2")
+    page.goto(f"{page.base}/#/mail")
+    expect(page.locator(".notice.warn")).to_contain_text("غير مُعَدّ")
+    page.fill("#mail-tenant_id", "not a tenant")
+    page.click("#mail-save")
+    expect(page.locator("#toast")).to_contain_text("Tenant ID")
+    assert not page.errors

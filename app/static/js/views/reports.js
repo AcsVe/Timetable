@@ -29,6 +29,7 @@ const KINDS = [
   ['cover-daily', 'حصص الإشغال اليومية', ['date', 'stage_id', 'teacher_id'], 'الغياب والإشغال'],
   ['cover-stats', 'حصص الإشغال والغياب لكل معلم', ['date_from', 'date_to', 'stage_id', 'teacher_id'], 'الغياب والإشغال'],
   ['absence-log', 'سجل غياب المعلمين', ['date_from', 'date_to', 'stage_id', 'teacher_id'], 'الغياب والإشغال'],
+  ['student-lists', 'قوائم الطلبة حسب الشعب', ['stage_id', 'grade_id', 'section_id'], 'الطلبة'],
 ];
 const GRID_KINDS = new Set(['section-timetable', 'teacher-timetable', 'subject-timetable', 'room-timetable', 'free-teachers']);
 const MASTER_KINDS = new Set(['stage-timetable', 'teachers-master']);

@@ -361,7 +361,7 @@ class CoverDay:
             t = self.teachers.get(tid)
             lines = []
             for n in sorted(ns, key=lambda x: x.period_no):
-                when = f" ({_hm(n.starts_at)}–{_hm(n.ends_at)})" if n.starts_at else ""
+                when = f" ({_hm(n.starts_at)}\u200e–\u200e{_hm(n.ends_at)})" if n.starts_at else ""
                 room = n.substitution.room_id or n.card.room_id
                 room_txt = ""
                 if room:
@@ -372,7 +372,7 @@ class CoverDay:
                              f"{self.need_json(n)['sections']}{room_txt} (بدلاً من {_tname(self.teachers.get(n.teacher_id))})")
             day = self.weekday.name_ar if self.weekday else ""
             text = (f"{_tname(t)}، السلام عليكم.\nلديك {count(len(ns), 'period')} للإشغال يوم {day} "
-                    f"{self.date.isoformat()}:\n" + "\n".join(lines))
+                    f"\u200e{self.date.isoformat()}\u200f:\n" + "\n".join(lines))
             out.append({"teacher_id": str(tid), "name": t.name_ar if t else "?", "user_id": str(t.user_id) if t and t.user_id else None,
                         "email": t.email if t else None, "phone": t.phone if t else None, "count": len(ns), "text": text})
         out.sort(key=lambda x: x["name"])

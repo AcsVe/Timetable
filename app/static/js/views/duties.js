@@ -4,6 +4,7 @@ import * as api from '../api.js';
 import { lang, t } from '../i18n.js';
 import { byId, canEdit, currentTimetable, isAdmin, list } from '../store.js';
 import { bulkTable, confirmBox, h, nameOf, openForm, put, searchBox, swap, toast, toastError, matchesQuery } from '../ui.js';
+import { notifyDialog } from './notify.js';
 import { collectExtra, editModule, extraFields, extraLabel, extraText, extraValues, label, loadModule, placeSubFields, title } from './modconf.js';
 
 const hm = x => (x ? String(x).slice(0, 5) : '');
@@ -175,6 +176,13 @@ export async function render(root) {
       h('button', { class: 'btn ghost', onclick: () => report('duty-roster', 'pdf') }, t('طباعة جدول المناوبة PDF')),
       h('button', { class: 'btn ghost', onclick: () => report('duty-roster', 'xlsx') }, t('تصدير Excel')),
       h('button', { class: 'btn ghost', onclick: () => report('duty-teachers', 'pdf') }, t('مناوبات كل معلم')),
+      termId ? h('button', { class: 'btn ghost', id: 'notify-duties', onclick: async () => {
+        try {
+          const r = await api.get(`/api/school-ops/messages?what=duties&term_id=${termId}`);
+          await notifyDialog({ title: t('إبلاغ المعلمين المناوبين'), messages: r.messages, canSend: canEdit(),
+                               send: body => api.post('/api/duty-assignments/notify', { term_id: termId, ...body }) });
+        } catch (e) { toastError(e); }
+      } }, t('إبلاغ المناوبين')) : null,
       canEdit() && terms.length > 1 ? h('button', { class: 'btn ghost', onclick: copyFrom }, t('نسخ من فصل آخر')) : null,
       isAdmin() ? h('button', { class: 'btn ghost', onclick: async () => {
         if (await editModule(mod, { lists: [

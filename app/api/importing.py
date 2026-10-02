@@ -12,7 +12,7 @@ from app.errors import ApiError
 from app.extensions import db
 
 MAX_FILE = 20_000_000
-KINDS = {"teachers", "subjects", "rooms", "sections", "lessons"}
+KINDS = {"teachers", "subjects", "rooms", "sections", "lessons", "students"}
 
 
 def _bundles():

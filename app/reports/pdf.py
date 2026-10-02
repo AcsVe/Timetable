@@ -321,7 +321,7 @@ def render_pdf(rep: Report, logo: bytes | None) -> bytes:
     _register()
     rtl = rep.rtl
     pal = Palette(rep.style)
-    wide = bool(rep.grids) or any(len(t.columns) > 5 for t in rep.tables)
+    wide = (bool(rep.grids) or any(len(t.columns) > 5 for t in rep.tables)) and rep.kind != "student-lists"
     pagesize = landscape(A4) if wide else A4
     st = _styles(rtl, pal)
     buf = io.BytesIO()
@@ -372,7 +372,7 @@ def render_pdf(rep: Report, logo: bytes | None) -> bytes:
         story += sign
     for i, t in enumerate(rep.tables):
         if i:
-            story.append(Spacer(1, 14))
+            story.append(PageBreak() if rep.kind == "student-lists" else Spacer(1, 14))
         story += _table_flowables(rep, t, st, width, pal)
     for n in rep.notes:
         story += [Spacer(1, 8), Paragraph(rich(n, rtl), st["foot"])]

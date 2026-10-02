@@ -48,9 +48,9 @@ def gender(v) -> str | None:
     k = norm(v)
     if not k:
         return None
-    if k in {"m", "male", "man", "ذكر", "م", "معلم", "بنين", "رجل"}:
+    if k in {"m", "male", "man", "boy", "ذكر", "ذكور", "م", "معلم", "بنين", "رجل", "طالب", "ولد"}:
         return "m"
-    if k in {"f", "female", "woman", "انثي", "ث", "معلمه", "بنات", "امراه"}:
+    if k in {"f", "female", "woman", "girl", "انثي", "اناث", "ث", "معلمه", "بنات", "امراه", "طالبه", "بنت"}:
         return "f"
     raise ValueError(clean(v))
 

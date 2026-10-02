@@ -216,7 +216,10 @@ def render_xlsx(rep: Report, logo: bytes | None) -> bytes:
     used: set[str] = set()
     for g in rep.grids:
         _write_grid(wb.create_sheet(_sheet_title(g.title.split(": ", 1)[-1], used)), rep, g, logo)
-    if rep.tables:
+    if rep.tables and rep.kind == "student-lists":   # one sheet per section
+        for t in rep.tables:
+            _write_table(wb.create_sheet(_sheet_title(t.title.split(": ", 1)[-1], used)), rep, t, logo)
+    elif rep.tables:
         ws = wb.create_sheet(_sheet_title(rep.title, used))
         end = _write_table(ws, rep, rep.tables[0], logo)
         for t in rep.tables[1:]:   # further tables of the same report go under the first one

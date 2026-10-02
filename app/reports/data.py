@@ -34,7 +34,7 @@ KINDS = (
     "teacher-sections", "teacher-subjects", "teacher-daily",
     "stats-teachers", "stats-subjects", "stats-sections", "load-status",
     "exam-schedule", "invigilation", "duty-roster", "duty-teachers",
-    "cover-daily", "cover-stats", "absence-log",
+    "cover-daily", "cover-stats", "absence-log", "student-lists",
 )
 # Tables that are a plain matrix (row label × column label) and can be turned on their side.
 MATRIX_KINDS = {"teacher-sections", "teacher-daily", "duty-roster"}
@@ -63,6 +63,7 @@ TITLES = {
     "cover-daily": ("حصص الإشغال اليومية", "Daily cover sheet"),
     "cover-stats": ("حصص الإشغال والغياب لكل معلم", "Cover and absence per teacher"),
     "absence-log": ("سجل غياب المعلمين", "Teacher absence log"),
+    "student-lists": ("قوائم الطلبة حسب الشعب", "Class lists"),
 }
 DATE_KEYS = ("date", "date_from", "date_to")
 
@@ -1142,6 +1143,34 @@ def absence_log(ctx: Ctx) -> Table:
                  rows=rows, numeric={4}, totals=[ctx.L("المجموع", "Total"), "", "", "", sum(r[4] for r in rows), "", ""])
 
 
+def student_lists(ctx: Ctx) -> list[Table]:
+    """One numbered list per section (with its groups and blank columns to fill by hand)."""
+    from app.models import Student
+    by_sec = defaultdict(list)
+    for st in db.session.scalars(select(Student).where(Student.is_active.is_(True))):
+        by_sec[st.section_id].append(st)
+    tables = []
+    for sid in sorted((x for x in by_sec if ctx.section_in_scope(x)), key=ctx.section_sort_key):
+        rows = []
+        for i, st in enumerate(sorted(by_sec[sid], key=lambda x: x.name_ar), start=1):
+            groups = ctx.sep.join(ctx.name(ctx.groups.get(g)) for g in st.group_ids or [] if g in ctx.groups)
+            rows.append([i, st.student_no or "", ctx.name(st), {"m": ctx.L("ذكر", "M"), "f": ctx.L("أنثى", "F")}.get(st.gender, ""),
+                         groups, "", "", ""])
+        sec = ctx.sections[sid]
+        ct = ctx.teachers.get(sec.class_teacher_id)
+        boys = sum(1 for x in by_sec[sid] if x.gender == "m")
+        girls = sum(1 for x in by_sec[sid] if x.gender == "f")
+        tables.append(Table(
+            title=f"{ctx.L('الشعبة', 'Section')}: {ctx.section_label(sid)}",
+            subtitle=" — ".join(x for x in (f"{ctx.L('مربي الصف', 'Class teacher')}: {ctx.name(ct)}" if ct else "",
+                                            ctx.L(f"عدد الطلبة: {len(rows)} (ذكور: {boys}، إناث: {girls})",
+                                                  f"Students: {len(rows)} (M {boys}, F {girls})")) if x),
+            columns=["#", ctx.L("رقم الطالب", "No."), ctx.L("اسم الطالب", "Student"), ctx.L("الجنس", "Gender"),
+                     ctx.L("المجموعة", "Group"), "", "", ""],
+            rows=rows, numeric={0}))
+    return tables
+
+
 def build_report(tt: Timetable, kind: str, lang: str, filters: dict, layout: str = "rows", style: str = "plain",
                  show: set | None = None, signature: list | None = None) -> Report:
     ctx = Ctx(tt, lang, filters, show)
@@ -1196,6 +1225,8 @@ def build_report(tt: Timetable, kind: str, lang: str, filters: dict, layout: str
         rep.tables = [cover_stats(ctx)]
     elif kind == "absence-log":
         rep.tables = [absence_log(ctx)]
+    elif kind == "student-lists":
+        rep.tables = student_lists(ctx)
     if kind in MATRIX_KINDS and rep.layout == "cols":
         rep.tables = [transpose(t, ctx.L("المجموع", "Total")) for t in rep.tables]
     if "footer" not in ctx.show:

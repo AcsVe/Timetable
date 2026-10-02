@@ -23,6 +23,7 @@ from app.models import (
     Grade,
     Lesson,
     Section,
+    Student,
     StudentGroup,
     Substitution,
     Teacher,
@@ -68,6 +69,9 @@ def stages_of(obj) -> set[uuid.UUID] | None:
         return GLOBAL
     if isinstance(obj, Teacher):
         return {s.id for s in obj.stages} or GLOBAL
+    if isinstance(obj, Student):
+        sid = _section_stage(obj.section_id)
+        return {sid} if sid else set()
     if isinstance(obj, TeacherAbsence):
         t = db.session.get(Teacher, obj.teacher_id)
         return stages_of(t) if t else set()

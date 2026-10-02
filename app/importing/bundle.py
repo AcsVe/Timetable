@@ -37,6 +37,7 @@ class Bundle:
     cards: list[dict] = field(default_factory=list)      # {lesson, day, period, duration, room}   (aSc only)
     periods: list[dict] = field(default_factory=list)    # {no, start, end}                        (aSc only)
     bells: list[dict] = field(default_factory=list)      # {template, days:[str], grades:[str], slots:[{kind,no,start,end,row}]}
+    students: list[dict] = field(default_factory=list)   # {no, name, gender, stage, grade, section, groups, …}
     meetings: list[dict] = field(default_factory=list)   # {key, subject, teachers}: no class (aSc teacher meetings)
     days: int = 0                                        # number of days in the aSc week
     # Spreadsheets refer to sections by the names people type; aSc by id.
@@ -51,4 +52,4 @@ class Bundle:
         self.warnings.append(Issue(ar, en, where, row))
 
     def is_empty(self) -> bool:
-        return not any((self.subjects, self.teachers, self.rooms, self.sections, self.lessons, self.bells))
+        return not any((self.subjects, self.teachers, self.rooms, self.sections, self.lessons, self.bells, self.students))

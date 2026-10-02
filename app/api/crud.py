@@ -41,6 +41,7 @@ from app.models import (
     School,
     Section,
     Stage,
+    Student,
     StudentGroup,
     Subject,
     Substitution,
@@ -338,6 +339,40 @@ def _substitution_write(obj: Substitution, data: dict, creating: bool):
         obj.auto = False
 
 
+def _student_write(obj: Student, data: dict, creating: bool):
+    if "group_ids" in data:
+        ids = [uuid.UUID(i) for i in _ids_exist(StudentGroup, data["group_ids"], "group_ids")]
+        divs = {d.id for d in db.session.scalars(select(Division).where(Division.section_id == obj.section_id))}
+        seen = set()
+        for gid in ids:
+            g = db.session.get(StudentGroup, gid)
+            if g.division_id not in divs:
+                raise ApiError("validation", 400, details={"field": "group_ids", "message": "المجموعة ليست من تقسيمات شعبة الطالب"})
+            if g.division_id in seen:
+                raise ApiError("validation", 400, details={"field": "group_ids", "message": "لا يكون الطالب في مجموعتين من التقسيم نفسه"})
+            seen.add(g.division_id)
+        obj.group_ids = ids
+    elif not creating and inspect_changed(obj, "section_id"):
+        obj.group_ids = []   # groups belong to the old section
+    if "extra" in data:
+        obj.extra = _extra_dict(data["extra"])
+    if obj.student_no:
+        dup = db.session.scalars(select(Student).where(Student.student_no == obj.student_no, Student.id != obj.id)).first()
+        if dup is not None:
+            raise ApiError("validation", 409, details={"field": "student_no", "message": f"رقم الطالب {obj.student_no} مستخدم للطالب {dup.name_ar}"})
+
+
+def inspect_changed(obj, attr: str) -> bool:
+    from sqlalchemy import inspect as _inspect
+    return _inspect(obj).attrs[attr].history.has_changes()
+
+
+def _student_after(obj: Student, old_section=None):
+    from app.importing.apply import recount_students
+    db.session.flush()
+    recount_students({obj.section_id, old_section})
+
+
 def _must_get(model, id_, field_name):
     obj = db.session.get(model, id_)
     if obj is None:
@@ -370,6 +405,7 @@ RESOURCES: dict[str, Resource] = {
                              create_only_fields=frozenset({"timetable_id"})),
     "exam-sessions": Resource(ExamSession, write_extra=_exam_write),
     "duty-assignments": Resource(DutyAssignment, write_extra=_duty_write),
+    "students": Resource(Student, write_extra=_student_write, after_write=_student_after),
     "absences": Resource(TeacherAbsence, write_extra=_absence_write, before_delete=_absence_before_delete),
     "substitutions": Resource(Substitution, write_extra=_substitution_write,
                               read_only_fields=frozenset({"notified_at"}),
@@ -517,6 +553,8 @@ def create_resource(res_name):
     require_write(current_user, obj)
     db.session.add(obj)
     db.session.flush()
+    if res.after_write:
+        res.after_write(obj)
     db.session.refresh(obj)
     return serialize(res, obj), 201
 
@@ -531,11 +569,14 @@ def update_resource(res_name, id_):
     obj = _get_obj(res, id_)
     require_write(current_user, obj)
     check_version(obj, data.get("version"))
+    old_section = getattr(obj, "section_id", None)
     apply_fields(res, obj, data, creating=False)
     if res.write_extra:
         res.write_extra(obj, data, False)
     require_write(current_user, obj)  # cannot move a record into a stage you don't own
     db.session.flush()
+    if res.after_write:
+        res.after_write(obj, old_section) if old_section is not None else res.after_write(obj)
     db.session.refresh(obj)
     return serialize(res, obj), 200
 
@@ -559,6 +600,8 @@ def delete_resource(res_name, id_):
     obj.soft_delete()
     _clean_after_delete(obj)
     db.session.flush()
+    if res.after_write:
+        res.after_write(obj)
     return {"id": str(obj.id), "deleted": True, "version": obj.version}, 200
 
 
@@ -574,7 +617,7 @@ def bulk_delete_resource(res_name):
         raise ApiError("validation", 400, details={"field": "items", "reason": "non-empty list required"})
     if len(items) > 1000:
         raise ApiError("validation", 400, details={"field": "items", "reason": "at most 1000"})
-    deleted = []
+    deleted, objs = [], []
     for i, it in enumerate(items):
         if not isinstance(it, dict):
             raise ApiError("validation", 400, details={"field": f"items[{i}]"})
@@ -589,7 +632,11 @@ def bulk_delete_resource(res_name):
         obj.soft_delete()
         _clean_after_delete(obj)
         deleted.append(str(obj.id))
+        objs.append(obj)
     db.session.flush()
+    if res.after_write:
+        for o in objs:
+            res.after_write(o)
     return {"deleted": deleted, "count": len(deleted)}, 200
 
 
