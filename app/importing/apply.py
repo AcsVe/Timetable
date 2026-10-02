@@ -58,6 +58,24 @@ def _digits(name: str) -> int:
     return int(m.group()) if m else 0
 
 
+_ORDINALS = [("الحادي عشر", 11), ("الثاني عشر", 12), ("الأول", 1), ("الاول", 1), ("الثاني", 2), ("الثالث", 3),
+             ("الرابع", 4), ("الخامس", 5), ("السادس", 6), ("السابع", 7), ("الثامن", 8), ("التاسع", 9), ("العاشر", 10)]
+
+
+def grade_number(name: str) -> int | None:
+    """«الصف 7» / «Grade 7» / «الصف السابع» / «الثاني عشر» → 7 / 7 / 7 / 12; None when the name has no single number."""
+    name = (name or "").translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
+    nums = re.findall(r"\d+", name)
+    if len(nums) == 1:
+        return int(nums[0])
+    if nums:
+        return None
+    for word, n in _ORDINALS:          # two-word ordinals first, so «الثاني عشر» is not read as 2
+        if word in name:
+            return n
+    return None
+
+
 class Importer:
     def __init__(self, bundle: Bundle, *, stage_id=None, stage_name: str | None = None, timetable_id=None,
                  new_timetable_name: str | None = None, term_id=None):
@@ -733,7 +751,7 @@ class Importer:
                         found = list(self.grades)
                     else:
                         found = [x for x in self.grades if norm(tok) in (norm(x.name_ar), norm(x.name_en))
-                                 or (tok.strip().isdigit() and _digits(x.name_ar) == int(tok) and re.fullmatch(r"\D*\d+\D*", x.name_ar))]
+                                 or (tok.strip().isdigit() and int(tok) in (grade_number(x.name_ar), grade_number(x.name_en or "")))]
                     if not found:
                         missing.append(tok)
                     grades += [x for x in found if x not in grades]

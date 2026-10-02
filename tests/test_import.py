@@ -289,3 +289,10 @@ def test_start_over_with_asc_and_bell_sheet_together(base, ctx):
     assert pdf.status_code == 200 and pdf.data[:4] == b"%PDF"
     t = base.ok("get", f"/api/timetables/{tt}/reports/teacher-timetable")
     assert any("الحصص المُسنَدة" in g["footer"] for g in t["grids"])
+
+
+def test_grade_numbers_match_names_written_in_words():
+    """Bell sheets write grades as numbers (7، 8، 9 or 10-12); schools often name grades in words."""
+    from app.importing.apply import grade_number
+    assert [grade_number(n) for n in ("الصف السابع", "الصف الحادي عشر", "الثاني عشر", "الصف الثاني", "الصف 7", "Grade 10", "صف")] \
+        == [7, 11, 12, 2, 7, 10, None]
