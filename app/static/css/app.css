@@ -333,3 +333,20 @@ input.narrow { width: 72px; }
 }
 .report-preview table.data.report-grid th, .report-preview table.data.report-grid td { text-align: center; }
 .report-preview table.data.report-grid .pnum { display: block; }
+
+/* absences and cover */
+table.data tr.open td { background: #fffaf0; }
+table.data tr.stale td { opacity: .65; }
+select.decision { min-width: 200px; max-width: 320px; }
+.stat.warn { border: 1px solid var(--warn); }
+.stat.warn b { color: var(--warn); }
+.chip.ok { background: var(--ok-bg); color: var(--ok); }
+.cand-table tr.best td { background: var(--ok-bg); }
+.msg-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; margin: 8px 0; }
+.msg-card.unread { border-color: var(--accent); }
+.msg-card .toolbar { margin: 0 0 4px; }
+.msg-text { white-space: pre-wrap; font-family: inherit; margin: 0; font-size: .9rem; }
+.notif-btn { position: relative; padding-inline: 10px; }
+.notif-count { position: absolute; top: -4px; inset-inline-end: -4px; background: var(--err); color: #fff; border-radius: 99px;
+  font-size: .7rem; min-width: 18px; padding: 0 4px; line-height: 18px; text-align: center; }
+@media (max-width: 860px) { select.decision { min-width: 0; width: 100%; } }

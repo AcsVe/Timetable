@@ -14,7 +14,7 @@ const KINDS = [
   ['room-timetable', 'جدول إشغال القاعة', ['room_id'], 'الجداول'],
   ['stage-timetable', 'الجدول العام للمرحلة (الشعب)', ['stage_id', 'grade_id', 'section_id', 'subject_id', 'teacher_id'], 'الجداول'],
   ['teachers-master', 'الجدول العام للمعلمين', ['stage_id', 'grade_id', 'section_id', 'subject_id', 'teacher_id'], 'الجداول'],
-  ['free-teachers', 'المعلمون المتاحون في كل حصة (لحصص الإشغال)', ['stage_id', 'subject_id'], 'الجداول'],
+  ['free-teachers', 'المعلمون المتاحون في كل حصة (لحصص الإشغال)', ['date', 'stage_id', 'subject_id'], 'الجداول'],
   ['teacher-sections', 'توزيع المعلمين على الشعب', ALL, 'التوزيع والإحصائيات'],
   ['teacher-subjects', 'توزيع المعلمين على المباحث', ALL, 'التوزيع والإحصائيات'],
   ['teacher-daily', 'توزيع حصص المعلم على أيام الأسبوع', ALL, 'التوزيع والإحصائيات'],
@@ -26,6 +26,9 @@ const KINDS = [
   ['invigilation', 'جدول المراقبة على الامتحانات', ['stage_id', 'grade_id', 'subject_id', 'teacher_id'], 'الامتحانات والمناوبة'],
   ['duty-roster', 'جدول المناوبة', ['stage_id', 'teacher_id'], 'الامتحانات والمناوبة'],
   ['duty-teachers', 'مناوبات كل معلم', ['stage_id', 'teacher_id'], 'الامتحانات والمناوبة'],
+  ['cover-daily', 'حصص الإشغال اليومية', ['date', 'stage_id', 'teacher_id'], 'الغياب والإشغال'],
+  ['cover-stats', 'حصص الإشغال والغياب لكل معلم', ['date_from', 'date_to', 'stage_id', 'teacher_id'], 'الغياب والإشغال'],
+  ['absence-log', 'سجل غياب المعلمين', ['date_from', 'date_to', 'stage_id', 'teacher_id'], 'الغياب والإشغال'],
 ];
 const GRID_KINDS = new Set(['section-timetable', 'teacher-timetable', 'subject-timetable', 'room-timetable', 'free-teachers']);
 const MASTER_KINDS = new Set(['stage-timetable', 'teachers-master']);
@@ -34,7 +37,8 @@ const MATRIX_KINDS = new Set(['teacher-sections', 'teacher-daily', 'duty-roster'
 const SHOW = [['teacher', 'اسم المعلم'], ['section', 'الشعبة'], ['room', 'القاعة'], ['groups', 'المجموعات'],
               ['times', 'أوقات الحصص'], ['footer', 'المجموع والنصاب أسفل الجدول']];
 const FILTER_LABELS = { stage_id: 'المرحلة', grade_id: 'الصف', section_id: 'الشعبة', teacher_id: 'المعلم',
-                        subject_id: 'المبحث', room_id: 'القاعة' };
+                        subject_id: 'المبحث', room_id: 'القاعة', date: 'التاريخ', date_from: 'من تاريخ', date_to: 'إلى تاريخ' };
+const DATE_FILTERS = new Set(['date', 'date_from', 'date_to']);
 
 export async function render(root) {
   const tt = currentTimetable();
@@ -95,7 +99,10 @@ export async function render(root) {
     swap(layoutSel, layoutOptions().map(([v, l]) => h('option', { value: v, selected: v === layout }, l)));
     drawShow();
     for (const k of Object.keys(filters)) if (!allowed().includes(k)) delete filters[k];
-    swap(filterHost, allowed().map(k => h('label', { class: 'inline' }, `${t(FILTER_LABELS[k])}:`,
+    swap(filterHost, allowed().map(k => DATE_FILTERS.has(k)
+      ? h('label', { class: 'inline' }, `${t(FILTER_LABELS[k])}:`, h('input', { type: 'date', value: filters[k] || '', dataset: { filter: k },
+          'aria-label': t(FILTER_LABELS[k]), onchange: e => { filters[k] = e.target.value || undefined; persist(); load(); } }))
+      : h('label', { class: 'inline' }, `${t(FILTER_LABELS[k])}:`,
       h('select', { dataset: { filter: k }, 'aria-label': t(FILTER_LABELS[k]), onchange: e => {
         filters[k] = e.target.value || undefined;
         if (k === 'stage_id') { delete filters.grade_id; delete filters.section_id; }

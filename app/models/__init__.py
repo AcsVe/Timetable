@@ -40,3 +40,4 @@ from app.models.users import (  # noqa: F401
     user_stage,
 )
 from app.models.school_ops import DutyAssignment, ExamSession  # noqa: F401
+from app.models.cover import COVER_KINDS, Substitution, TeacherAbsence  # noqa: F401

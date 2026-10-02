@@ -290,13 +290,15 @@ constraint_rule                -- مكافئ Card relationships في ASC
 
 ---
 
-## 8. البدلاء والتقويم (المرحلة 2 — يُصمَّم الآن ويُبنى لاحقاً)
+## 8. البدلاء والتقويم (البدلاء مبنيّون — المرحلة 5)
 
 ```
-absence_reason   name_ar, name_en
-teacher_absence  teacher_id, date_from, date_to, period_from NULL, period_to NULL, reason_id, note
-substitution     date, card_id, original_teacher_id, substitute_teacher_id NULL,
-                 kind 'cover'|'cancel'|'merge'|'room_change', room_id NULL, note, notified_at
+teacher_absence  teacher_id, date_from, date_to, period_from NULL, period_to NULL, reason text, note, extra jsonb
+                 -- أسباب الغياب قائمة تعدّلها المدرسة في app_setting["module:cover"] بدل جدول absence_reason
+substitution     timetable_id, date, card_id, period_no, original_teacher_id, substitute_teacher_id NULL,
+                 kind 'cover'|'merge'|'cancel'|'none', room_id NULL, note, notified_at, auto
+                 -- سجل لكل حصة (لا لكل بطاقة) حتى تأخذ الحصة المزدوجة بديلين مختلفين إن لزم
+                 -- فريد: (date, card_id, period_no, original_teacher_id) للسجلات الحية
 calendar_event   title_ar, title_en, date_from, date_to, kind, cancels_lessons bool,
                  scope_type, scope_ids UUID[]
 ```

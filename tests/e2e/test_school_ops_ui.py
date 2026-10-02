@@ -1,4 +1,6 @@
 """Browser tests for the load rules, duty roster, exam timetable, grid colours and list bulk actions."""
+import re
+
 from playwright.sync_api import expect
 
 
@@ -72,4 +74,24 @@ def test_reports_black_and_white_by_default(page):
     expect(page.locator(".report-preview")).to_have_class("report-preview plain")
     page.select_option("#report-kind", "stage-timetable")
     expect(page.locator(".report-table.compact")).to_be_visible()
+    assert not page.errors
+
+
+def test_absence_then_fair_automatic_cover(page):
+    from tests.e2e.test_ui import cell, open_grid, tray_chip
+    open_grid(page, "الخامس / أ")
+    tray_chip(page, "العلوم").drag_to(cell(page, 0, 1))          # Sunday, period 1
+    expect(page.locator("#toast")).to_contain_text("تم وضع الحصة")
+    page.goto(f"{page.base}/#/cover?date=2026-10-04")             # a Sunday
+    page.click("#add-absence")
+    page.locator("#f-teacher_ids .multi-opts label", has_text="محمود").locator("input").check()
+    page.fill("#f-reason", "إجازة مرضية")
+    page.click("#modal-form button[type=submit]")
+    expect(page.locator("select.decision")).to_have_count(1)
+    page.click("#cover-auto")
+    expect(page.locator("#toast")).to_contain_text("وُزِّعت: 1")
+    expect(page.locator("select.decision")).to_have_value(re.compile("^t:"))
+    page.click("text=رسائل البدلاء")
+    expect(page.locator(".msg-text")).to_contain_text("للإشغال")
+    assert "null" not in page.locator("#modal-form").inner_text()
     assert not page.errors

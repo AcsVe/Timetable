@@ -99,7 +99,7 @@ export function openForm({ title, fields, values = {}, submitLabel, onSubmit, ex
     grid.append(wrap);
   }
   const submit = h('button', { class: 'btn', type: 'submit', value: 'ok' }, submitLabel || t('حفظ'));
-  form.append(h('h2', {}, title), grid, extra || null, err,
+  put(form, h('h2', {}, title), grid, extra || null, err,
     h('div', { class: 'modal-actions' },
       h('button', { class: 'btn ghost', type: 'button', onclick: () => dlg.close() }, t('إلغاء')), submit));
 
@@ -177,8 +177,9 @@ export const matchesQuery = (text, q) => !q || norm(text).includes(norm(q));
  * columns: [{label, get(item) → node|text, cls}]; text(item) → searchable text.
  * Returns { el, setQuery(q), setItems(items) }.
  */
-export function bulkTable({ items, columns, text, actions, onBulkDelete, emptyText, rowClass }) {
+export function bulkTable({ items, columns, text, actions, onBulkDelete, emptyText, rowClass, bulkActions = [], deleteLabel }) {
   let all = items, q = '';
+  const selectable = !!onBulkDelete || bulkActions.length > 0;
   const selected = new Set();
   const host = h('div');
   const bar = h('div', { class: 'bulk-bar', hidden: true });
@@ -189,24 +190,29 @@ export function bulkTable({ items, columns, text, actions, onBulkDelete, emptyTe
       checked: shown.length > 0 && shown.every(x => selected.has(x.id)),
       onchange: e => { shown.forEach(x => (e.target.checked ? selected.add(x.id) : selected.delete(x.id))); draw(); } });
     const rows = shown.map(x => h('tr', { dataset: { id: x.id }, class: [selected.has(x.id) ? 'selected' : '', rowClass ? rowClass(x) : ''].join(' ').trim() || null },
-      onBulkDelete ? h('td', { class: 'check' }, h('input', { type: 'checkbox', checked: selected.has(x.id), 'aria-label': t('تحديد'),
+      selectable ? h('td', { class: 'check' }, h('input', { type: 'checkbox', checked: selected.has(x.id), 'aria-label': t('تحديد'),
         onchange: e => { e.target.checked ? selected.add(x.id) : selected.delete(x.id); draw(); } })) : null,
       columns.map(c => h('td', { class: c.cls || null }, c.get(x))),
       actions ? h('td', { class: 'row-actions' }, actions(x)) : null));
     swap(host, shown.length
       ? h('div', { class: 'grid-scroll' }, h('table', { class: 'data' },
-          h('thead', {}, h('tr', {}, onBulkDelete ? h('th', { class: 'check' }, head) : null,
+          h('thead', {}, h('tr', {}, selectable ? h('th', { class: 'check' }, head) : null,
             columns.map(c => h('th', {}, c.label)), actions ? h('th') : null)),
           h('tbody', {}, rows)))
       : h('p', { class: 'muted' }, q ? t('لا توجد نتائج مطابقة للبحث') : (emptyText || t('لا توجد سجلات بعد'))));
     bar.hidden = !selected.size;
     swap(bar, h('span', {}, `${t('المحدد')}: ${selected.size}`),
       h('button', { type: 'button', class: 'btn small ghost', onclick: () => { selected.clear(); draw(); } }, t('إلغاء التحديد')),
+      bulkActions.map(a => h('button', { type: 'button', class: 'btn small', onclick: async () => {
+        const chosen = all.filter(x => selected.has(x.id));
+        if (!chosen.length) return;
+        try { await a.run(chosen); selected.clear(); draw(); } catch (e) { toastError(e); }
+      } }, a.label)),
       onBulkDelete ? h('button', { type: 'button', class: 'btn small danger', onclick: async () => {
         const chosen = all.filter(x => selected.has(x.id));
         if (!chosen.length || !(await confirmBox(`${t('أتريد حذف السجلات المحددة؟')} (${chosen.length})`))) return;
         try { await onBulkDelete(chosen); selected.clear(); } catch (e) { toastError(e); }
-      } }, t('حذف المحدد')) : null);
+      } }, deleteLabel || t('حذف المحدد')) : null);
   }
   draw();
   return {

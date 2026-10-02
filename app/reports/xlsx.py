@@ -159,10 +159,10 @@ def _write_signature(ws, rep: Report, row: int, width: int):
 def _write_table(ws, rep: Report, t: Table, logo, start_row: int | None = None):
     look = Look(rep.style)
     if start_row is None:
-        _header(ws, rep, t.title + (f" — {t.subtitle}" if t.subtitle else ""), len(t.columns), logo, look)
+        _header(ws, rep, " — ".join(x for x in (t.title, t.subtitle) if x), len(t.columns), logo, look)
         r0 = HEADER_ROWS + 1
     else:
-        ws.cell(row=start_row, column=1, value=t.title).font = Font(name="Arial", bold=True, size=12, color=look.title_color)
+        ws.cell(row=start_row, column=1, value=t.title or t.subtitle).font = Font(name="Arial", bold=True, size=12, color=look.title_color)
         r0 = start_row + 1
     if t.group_header:
         col = 1

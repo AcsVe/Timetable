@@ -24,7 +24,9 @@ from app.models import (
     Lesson,
     Section,
     StudentGroup,
+    Substitution,
     Teacher,
+    TeacherAbsence,
 )
 
 GLOBAL = None  # marker: record has no stage → admin only
@@ -66,6 +68,11 @@ def stages_of(obj) -> set[uuid.UUID] | None:
         return GLOBAL
     if isinstance(obj, Teacher):
         return {s.id for s in obj.stages} or GLOBAL
+    if isinstance(obj, TeacherAbsence):
+        t = db.session.get(Teacher, obj.teacher_id)
+        return stages_of(t) if t else set()
+    if isinstance(obj, Substitution):
+        return stages_of(db.session.get(Card, obj.card_id))
     if isinstance(obj, (ExamSession, DutyAssignment)):
         return {obj.stage_id} if obj.stage_id else GLOBAL
     return GLOBAL
@@ -85,6 +92,8 @@ def can_write(user, obj) -> bool:
     if stages is GLOBAL:
         return False
     if isinstance(obj, Availability) and obj.entity_type == "teacher":
+        return bool(stages & user.stage_ids)
+    if isinstance(obj, TeacherAbsence):   # a teacher shared with your stage
         return bool(stages & user.stage_ids)
     if isinstance(obj, INTERSECT_MODELS):
         return bool(stages & user.stage_ids)

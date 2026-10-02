@@ -1,7 +1,7 @@
 import * as api from './api.js';
 import { captureStaticText, lang, setLang, t, onLangChange } from './i18n.js';
 import { state, isAdmin } from './store.js';
-import { h, jumpTo, toastError } from './ui.js';
+import { h, jumpTo, put, toastError } from './ui.js';
 
 const ROUTES = {
   home: () => import('./views/home.js'),
@@ -10,6 +10,7 @@ const ROUTES = {
   validate: () => import('./views/validate.js'),
   reports: () => import('./views/reports.js'),
   loads: () => import('./views/loads.js'),
+  cover: () => import('./views/cover.js'),
   exams: () => import('./views/exams.js'),
   duties: () => import('./views/duties.js'),
   timetables: () => import('./views/timetables.js'),
@@ -149,6 +150,7 @@ async function boot() {
   } catch (_) { /* optional */ }
 
   await loadTimetables().catch(toastError);
+  setupNotifications();
   document.getElementById('tt-select').onchange = e => {
     state.ttId = e.target.value;
     localStorage.setItem('ttId', state.ttId);
@@ -160,6 +162,43 @@ async function boot() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(err => console.warn('SW', err));
   }
+}
+
+// ---------------------------------------------------------------------------
+// In-app notifications (e.g. «you have a cover period tomorrow»)
+// ---------------------------------------------------------------------------
+async function refreshNotifications() {
+  try {
+    const r = await api.get('/api/notifications/mine');
+    const badge = document.getElementById('notif-count');
+    badge.textContent = r.unread > 9 ? '9+' : String(r.unread);
+    badge.hidden = !r.unread;
+    return r;
+  } catch (_) { return null; }
+}
+function setupNotifications() {
+  const btn = document.getElementById('notif-btn');
+  if (!btn) return;
+  refreshNotifications();
+  setInterval(refreshNotifications, 5 * 60 * 1000);
+  btn.onclick = async () => {
+    const r = await refreshNotifications();
+    const dlg = document.getElementById('modal');
+    const form = document.getElementById('modal-form');
+    form.innerHTML = '';
+    const items = r ? r.items : [];
+    put(form, h('h2', {}, t('الإشعارات')),
+      items.length ? items.map(n => h('div', { class: `msg-card${n.read ? '' : ' unread'}` },
+        h('div', { class: 'toolbar' }, h('b', {}, lang === 'en' && n.title_en ? n.title_en : n.title_ar),
+          h('span', { class: 'muted small', dir: 'ltr' }, (n.created_at || '').slice(0, 16).replace('T', ' ')),
+          n.url ? h('a', { class: 'btn small ghost', href: n.url, onclick: () => dlg.close() }, t('فتح')) : null),
+        n.body && n.body.text ? h('pre', { class: 'msg-text', dir: 'auto' }, n.body.text) : null))
+        : h('p', { class: 'muted' }, t('لا توجد إشعارات')),
+      h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => dlg.close() }, t('إغلاق'))));
+    dlg.onclose = null;
+    dlg.showModal();
+    if (r && r.unread) { api.post('/api/notifications/read', {}).then(refreshNotifications).catch(() => {}); }
+  };
 }
 
 boot();

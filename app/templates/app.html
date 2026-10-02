@@ -23,6 +23,7 @@
       <select id="tt-select"></select>
     </div>
     <div class="spacer"></div>
+    <button class="btn ghost notif-btn" id="notif-btn" type="button" aria-label="الإشعارات" title="الإشعارات">🔔<span id="notif-count" class="notif-count" hidden></span></button>
     <button class="btn ghost" id="lang-toggle">English</button>
     <span id="user-name" class="muted"></span>
     <form method="post" action="/auth/logout"><button class="btn ghost" type="submit">تسجيل الخروج</button></form>
@@ -38,7 +39,8 @@
       <a href="#/grid" data-route="grid">شبكة الجدول</a>
       <a href="#/validate" data-route="validate">التحقق</a>
       <a href="#/reports" data-route="reports">التقارير</a>
-      <div class="nav-title">الامتحانات والمناوبة</div>
+      <div class="nav-title">الغياب والامتحانات والمناوبة</div>
+      <a href="#/cover" data-route="cover">الغياب وحصص الإشغال</a>
       <a href="#/exams" data-route="exams">جدول الامتحانات</a>
       <a href="#/duties" data-route="duties">جدول المناوبة</a>
       <div class="nav-title">بيانات المدرسة</div>

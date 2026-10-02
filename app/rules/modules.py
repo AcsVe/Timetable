@@ -9,7 +9,7 @@ import re
 
 from app.errors import ApiError
 
-MODULES = ("exams", "duties")
+MODULES = ("exams", "duties", "cover")
 FIELD_TYPES = ("text", "number", "select", "teachers", "date", "time", "bool", "textarea")
 MAX_ITEMS = 300
 SEP = " › "
@@ -30,6 +30,11 @@ FIELDS = {
         "location": ("الموقع", "Location"), "stage_id": ("المرحلة", "Stage"),
         "time_label": ("الفترة", "Time slot"), "starts_at": ("من الساعة", "From"), "ends_at": ("إلى الساعة", "To"),
         "teacher_ids": ("المعلمون المناوبون", "Teachers on duty"), "notes": ("ملاحظات", "Notes"),
+    },
+    "cover": {
+        "teacher_id": ("المعلم الغائب", "Absent teacher"), "date_from": ("من تاريخ", "From"),
+        "date_to": ("إلى تاريخ", "To"), "period_from": ("من الحصة", "From period"),
+        "period_to": ("إلى الحصة", "To period"), "reason": ("سبب الغياب", "Reason"), "note": ("ملاحظات", "Notes"),
     },
 }
 
@@ -54,8 +59,14 @@ DEFAULTS = {
                             "نهاية الدوام"],
         },
     },
+    "cover": {
+        "title": {"ar": "الغياب وحصص الإشغال", "en": "Absences and cover"},
+        "lists": {"reasons": ["إجازة مرضية", "إجازة عرضية", "مهمة رسمية", "دورة تدريبية", "مغادرة خاصة",
+                              "إجازة أمومة", "إجازة بلا راتب"]},
+    },
 }
-LIST_KEYS = {"exams": ("session_labels", "locations"), "duties": ("duty_types", "locations", "time_labels")}
+LIST_KEYS = {"exams": ("session_labels", "locations"), "duties": ("duty_types", "locations", "time_labels"),
+             "cover": ("reasons",)}
 
 
 def _bad(field: str, reason: str):

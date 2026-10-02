@@ -34,6 +34,7 @@ KINDS = (
     "teacher-sections", "teacher-subjects", "teacher-daily",
     "stats-teachers", "stats-subjects", "stats-sections", "load-status",
     "exam-schedule", "invigilation", "duty-roster", "duty-teachers",
+    "cover-daily", "cover-stats", "absence-log",
 )
 # Tables that are a plain matrix (row label × column label) and can be turned on their side.
 MATRIX_KINDS = {"teacher-sections", "teacher-daily", "duty-roster"}
@@ -59,7 +60,11 @@ TITLES = {
     "invigilation": ("جدول المراقبة على الامتحانات", "Invigilation schedule"),
     "duty-roster": ("جدول المناوبة", "Duty roster"),
     "duty-teachers": ("مناوبات كل معلم", "Duties per teacher"),
+    "cover-daily": ("حصص الإشغال اليومية", "Daily cover sheet"),
+    "cover-stats": ("حصص الإشغال والغياب لكل معلم", "Cover and absence per teacher"),
+    "absence-log": ("سجل غياب المعلمين", "Teacher absence log"),
 }
+DATE_KEYS = ("date", "date_from", "date_to")
 
 
 @dataclass
@@ -275,6 +280,11 @@ class Ctx:
             parts.append(f"{self.L('المبحث', 'Subject')}: {self.name(self.subjects.get(f['subject_id']))}")
         if f.get("room_id"):
             parts.append(f"{self.L('القاعة', 'Room')}: {self.name(self.rooms.get(f['room_id']))}")
+        if f.get("date"):
+            parts.append(f"{self.L('التاريخ', 'Date')}: {f['date'].isoformat()}")
+        if f.get("date_from") or f.get("date_to"):
+            parts.append(f"{self.L('من', 'From')} {f['date_from'].isoformat() if f.get('date_from') else '…'} "
+                         f"{self.L('إلى', 'to')} {f['date_to'].isoformat() if f.get('date_to') else '…'}")
         return self.sep.join(parts)
 
     # -- loads ------------------------------------------------------------------
@@ -702,8 +712,31 @@ def free_teacher_grid(ctx: Ctx) -> list[Grid]:
     for a in db.session.scalars(select(Availability).where(Availability.timetable_id == ctx.tt.id,
                                                            Availability.entity_type == "teacher")):
         busy[(a.weekday_id, a.period_no)].add(a.entity_id)
+    day_only = None
+    if ctx.f.get("date"):   # one school day: absent teachers and those already covering are not free either
+        from app.models import Substitution, TeacherAbsence
+        from app.rules.cover import school_weekday
+        d0 = ctx.f["date"]
+        wd = school_weekday(d0)
+        day_only = wd.id if wd else None
+        if wd:
+            for a in db.session.scalars(select(TeacherAbsence).where(TeacherAbsence.date_from <= d0, TeacherAbsence.date_to >= d0)):
+                for p in range(1, 20):
+                    if a.covers(d0, p):
+                        busy[(wd.id, p)].add(a.teacher_id)
+            for sub in db.session.scalars(select(Substitution).where(Substitution.timetable_id == ctx.tt.id,
+                                                                     Substitution.date == d0, Substitution.kind == "cover")):
+                busy[(wd.id, sub.period_no)].add(sub.substitute_teacher_id)
     grid = _grid_for(ctx, ctx.L("المعلمون المتاحون في كل حصة", "Teachers free in each period"), [], lambda c, l: [], None)
-    for di, d in enumerate(ctx.days):
+    if day_only is not None or ctx.f.get("date"):
+        keep = [i for i, d in enumerate(ctx.days) if d.id == day_only]
+        grid.days = [grid.days[i] for i in keep]
+        grid.missing = {(keep.index(di), p) for di, p in grid.missing if di in keep}
+        grid.day_notes = [grid.day_notes[i] for i in keep] if grid.day_notes else []
+        days = [ctx.days[i] for i in keep]
+    else:
+        days = ctx.days
+    for di, d in enumerate(days):
         for p, _tl in grid.periods:
             if (di, p) in grid.missing:
                 continue
@@ -973,6 +1006,142 @@ def duty_teachers(ctx: Ctx) -> Table:
                  rows=rows, numeric={1}, totals=[ctx.L("المجموع", "Total"), sum(r[1] for r in rows), ""])
 
 
+# ---------------------------------------------------------------------------
+# Absences and cover
+# ---------------------------------------------------------------------------
+def _today():
+    return datetime.now(ZoneInfo(os.environ.get("APP_TIMEZONE", "Asia/Amman"))).date()
+
+
+def _cover_kind(ctx: Ctx, kind: str) -> str:
+    from app.rules.cover import KIND_LABELS
+    a, e = KIND_LABELS.get(kind, (kind, kind))
+    return ctx.L(a, e)
+
+
+def cover_daily(ctx: Ctx) -> tuple[list[Table], list[str], str]:
+    from app.rules.cover import CoverDay
+    d = ctx.f.get("date") or _today()
+    day = CoverDay(ctx.tt, d)
+    rows = []
+    want_t = ctx.f.get("teacher_id")
+    for n in day.needs():
+        if n.stale:
+            continue
+        s = n.substitution
+        if want_t and want_t not in (n.teacher_id, s.substitute_teacher_id if s else None):
+            continue
+        if ctx.f.get("stage_id") and not any(ctx.stage_of_section(t.section_id) == ctx.f["stage_id"] for t in n.lesson.targets):
+            continue
+        if s is None:
+            action = ctx.L("لم يُحدَّد بعد", "Not decided")
+        elif s.kind == "cover":
+            action = ctx.name(ctx.teachers.get(s.substitute_teacher_id))
+        else:
+            action = _cover_kind(ctx, s.kind) + (f" — {ctx.name(ctx.teachers.get(s.substitute_teacher_id))}"
+                                                 if s.substitute_teacher_id else "")
+        room = (s.room_id if s and s.room_id else n.card.room_id)
+        when = f"{n.starts_at.strftime('%H:%M')}\u200e–\u200e{n.ends_at.strftime('%H:%M')}" if n.starts_at else ""
+        rows.append([n.period_no, when, ctx.sep.join(ctx.target_label(t) for t in n.lesson.targets),
+                     ctx.name(ctx.subjects.get(n.lesson.subject_id)), ctx.name(ctx.teachers.get(n.teacher_id)), action,
+                     ctx.name(ctx.rooms.get(room)) if room else "", (s.note if s else "") or "", ""])
+    t1 = Table(title="", columns=[ctx.L("الحصة", "Period"), ctx.L("الوقت", "Time"), ctx.L("الشعبة", "Section"),
+                                  ctx.L("المبحث", "Subject"), ctx.L("المعلم الغائب", "Absent teacher"),
+                                  ctx.L("المعلم البديل / الإجراء", "Substitute / action"), ctx.L("القاعة", "Room"),
+                                  ctx.L("ملاحظات", "Notes"), ctx.L("توقيع البديل", "Signature")],
+               rows=rows, numeric={0})
+    abs_rows = []
+    for a in sorted(day.absences, key=lambda a: ctx.name(ctx.teachers.get(a.teacher_id))):
+        if want_t and a.teacher_id != want_t:
+            continue
+        span = ctx.L("اليوم كاملاً", "Whole day") if a.period_from is None else \
+            ctx.L(f"من الحصة {a.period_from} إلى الحصة {a.period_to}", f"Periods {a.period_from}–{a.period_to}")
+        abs_rows.append([ctx.name(ctx.teachers.get(a.teacher_id)), span, a.reason or "",
+                         f"{a.date_from.isoformat()} — {a.date_to.isoformat()}" if a.date_to != a.date_from else a.date_from.isoformat()])
+    t2 = Table(title=ctx.L("المعلمون الغائبون", "Absent teachers"),
+               columns=[ctx.L("المعلم", "Teacher"), ctx.L("الحصص", "Periods"), ctx.L("السبب", "Reason"), ctx.L("المدة", "Dates")],
+               rows=abs_rows)
+    sm = day.summary(day.needs())
+    dayname = ctx.name(day.weekday) if day.weekday else ""
+    sub = ctx.L(f"{dayname} {d.isoformat()}", f"{dayname} {d.isoformat()}")
+    t1.subtitle = sub
+    note = ctx.L(f"الحصص التي تحتاج إلى قرار: {sm['needs']} — حُسم منها: {sm['decided']} — بمعلم بديل: {sm['covered']}",
+                 f"Periods needing a decision: {sm['needs']} — decided: {sm['decided']} — covered: {sm['covered']}")
+    if day.weekday is None:
+        note = ctx.L("هذا التاريخ ليس يوم دوام", "This date is not a school day")
+    return [t1, t2], [note], sub
+
+
+def _range(ctx: Ctx):
+    from datetime import timedelta
+    d1 = ctx.f.get("date_to") or ctx.f.get("date") or _today()
+    d0 = ctx.f.get("date_from") or ctx.f.get("date")
+    if d0 is None:   # default: from the start of the timetable's term
+        from app.models import Term
+        term = db.session.get(Term, ctx.tt.term_id)
+        d0 = term.start_date if term and term.start_date else d1 - timedelta(days=90)
+    return d0, d1
+
+
+def _school_days_between(ctx: Ctx, a, b) -> int:
+    from datetime import timedelta
+    dows = {d.iso_dow for d in ctx.days}
+    n, x = 0, a
+    while x <= b:
+        if x.isoweekday() in dows:
+            n += 1
+        x += timedelta(days=1)
+    return n
+
+
+def cover_stats(ctx: Ctx) -> Table:
+    from app.models import Substitution, TeacherAbsence
+    d0, d1 = _range(ctx)
+    given, missed, decided_missed = defaultdict(int), defaultdict(int), defaultdict(int)
+    for s in db.session.scalars(select(Substitution).where(Substitution.timetable_id == ctx.tt.id,
+                                                           Substitution.date >= d0, Substitution.date <= d1)):
+        decided_missed[s.original_teacher_id] += 1
+        if s.kind == "cover" and s.substitute_teacher_id:
+            given[s.substitute_teacher_id] += 1
+    absent_days = defaultdict(int)
+    for a in db.session.scalars(select(TeacherAbsence).where(TeacherAbsence.date_from <= d1, TeacherAbsence.date_to >= d0)):
+        absent_days[a.teacher_id] += _school_days_between(ctx, max(a.date_from, d0), min(a.date_to, d1))
+    ids = set(given) | set(decided_missed) | set(absent_days)
+    if ctx.f.get("teacher_id"):
+        ids = {ctx.f["teacher_id"]}
+    if ctx.f.get("stage_id"):
+        ids = {i for i in ids if i in ctx.teachers and ctx.f["stage_id"] in {s.id for s in ctx.teachers[i].stages}}
+    rows = [[ctx.name(ctx.teachers[i]), given[i], absent_days[i], decided_missed[i]]
+            for i in sorted((i for i in ids if i in ctx.teachers), key=lambda i: (-given[i], ctx.name(ctx.teachers[i])))]
+    return Table(title=ctx.L(f"من {d0.isoformat()} إلى {d1.isoformat()}", f"{d0.isoformat()} to {d1.isoformat()}"),
+                 columns=[ctx.L("المعلم", "Teacher"), ctx.L("حصص الإشغال التي غطّاها", "Covers given"),
+                          ctx.L("أيام الغياب", "Days absent"), ctx.L("حصصه التي غُطّيت أو حُسمت", "Own periods covered")],
+                 rows=rows, numeric={1, 2, 3},
+                 totals=[ctx.L("المجموع", "Total"), sum(r[1] for r in rows), sum(r[2] for r in rows), sum(r[3] for r in rows)])
+
+
+def absence_log(ctx: Ctx) -> Table:
+    from app.models import TeacherAbsence
+    d0, d1 = _range(ctx)
+    rows = []
+    for a in db.session.scalars(select(TeacherAbsence).where(TeacherAbsence.date_from <= d1, TeacherAbsence.date_to >= d0)
+                                .order_by(TeacherAbsence.date_from)):
+        t = ctx.teachers.get(a.teacher_id)
+        if t is None or (ctx.f.get("teacher_id") and a.teacher_id != ctx.f["teacher_id"]):
+            continue
+        if ctx.f.get("stage_id") and ctx.f["stage_id"] not in {s.id for s in t.stages}:
+            continue
+        span = ctx.L("اليوم كاملاً", "Whole day") if a.period_from is None else \
+            ctx.L(f"من الحصة {a.period_from} إلى الحصة {a.period_to}", f"Periods {a.period_from}–{a.period_to}")
+        rows.append([ctx.name(t), a.date_from.isoformat(), a.date_to.isoformat(), span,
+                     _school_days_between(ctx, a.date_from, a.date_to), a.reason or "", a.note or ""])
+    return Table(title=ctx.L(f"من {d0.isoformat()} إلى {d1.isoformat()}", f"{d0.isoformat()} to {d1.isoformat()}"),
+                 columns=[ctx.L("المعلم", "Teacher"), ctx.L("من تاريخ", "From"), ctx.L("إلى تاريخ", "To"),
+                          ctx.L("الحصص", "Periods"), ctx.L("أيام الدوام", "School days"), ctx.L("السبب", "Reason"),
+                          ctx.L("ملاحظات", "Notes")],
+                 rows=rows, numeric={4}, totals=[ctx.L("المجموع", "Total"), "", "", "", sum(r[4] for r in rows), "", ""])
+
+
 def build_report(tt: Timetable, kind: str, lang: str, filters: dict, layout: str = "rows", style: str = "plain",
                  show: set | None = None, signature: list | None = None) -> Report:
     ctx = Ctx(tt, lang, filters, show)
@@ -1021,6 +1190,12 @@ def build_report(tt: Timetable, kind: str, lang: str, filters: dict, layout: str
         rep.tables = [duty_roster(ctx)]
     elif kind == "duty-teachers":
         rep.tables = [duty_teachers(ctx)]
+    elif kind == "cover-daily":
+        rep.tables, rep.notes, _sub = cover_daily(ctx)
+    elif kind == "cover-stats":
+        rep.tables = [cover_stats(ctx)]
+    elif kind == "absence-log":
+        rep.tables = [absence_log(ctx)]
     if kind in MATRIX_KINDS and rep.layout == "cols":
         rep.tables = [transpose(t, ctx.L("المجموع", "Total")) for t in rep.tables]
     if "footer" not in ctx.show:
@@ -1036,9 +1211,14 @@ def parse_show(raw: str | None) -> set | None:
 
 
 def parse_filters(args) -> dict:
+    from datetime import date as _date
     out = {}
     for k in FILTER_KEYS:
         v = args.get(k)
         if v:
             out[k] = uuid.UUID(v)
+    for k in DATE_KEYS:
+        v = args.get(k)
+        if v:
+            out[k] = _date.fromisoformat(v)
     return out

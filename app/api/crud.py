@@ -43,7 +43,9 @@ from app.models import (
     Stage,
     StudentGroup,
     Subject,
+    Substitution,
     Teacher,
+    TeacherAbsence,
     Term,
     Timetable,
     Weekday,
@@ -269,6 +271,73 @@ def _duty_write(obj: DutyAssignment, data: dict, creating: bool):
         obj.extra = _extra_dict(data["extra"])
 
 
+def _absence_write(obj: TeacherAbsence, data: dict, creating: bool):
+    if obj.date_from and obj.date_to and obj.date_to < obj.date_from:
+        raise ApiError("validation", 400, details={"field": "date_to", "reason": "before date_from",
+                                                     "message": "يجب ألّا يسبق تاريخُ النهاية تاريخَ البداية"})
+    if (obj.period_from is None) != (obj.period_to is None):
+        raise ApiError("validation", 400, details={"field": "period_to", "reason": "both or neither",
+                                                     "message": "حدِّد الحصة الأولى والأخيرة معاً، أو اتركهما فارغتين ليكون الغياب يوماً كاملاً"})
+    if obj.period_from is not None and (obj.period_from < 1 or obj.period_to < obj.period_from):
+        raise ApiError("validation", 400, details={"field": "period_to", "reason": "invalid range",
+                                                     "message": "يجب ألّا تسبق الحصةُ الأخيرة الحصةَ الأولى"})
+    if "extra" in data:
+        obj.extra = _extra_dict(data["extra"])
+    if (obj.date_to - obj.date_from).days > 366:
+        raise ApiError("validation", 400, details={"field": "date_to", "message": "مدة الغياب أطول من سنة"})
+
+
+def _absence_before_delete(obj: TeacherAbsence):
+    """Decisions taken for the periods this absence covered are removed with it (unless another absence
+    of the same teacher still covers them)."""
+    others = [a for a in db.session.scalars(select(TeacherAbsence).where(
+        TeacherAbsence.teacher_id == obj.teacher_id, TeacherAbsence.id != obj.id))]
+    for s in db.session.scalars(select(Substitution).where(
+            Substitution.original_teacher_id == obj.teacher_id,
+            Substitution.date >= obj.date_from, Substitution.date <= obj.date_to)):
+        if obj.covers(s.date, s.period_no) and not any(a.covers(s.date, s.period_no) for a in others):
+            s.soft_delete()
+
+
+def _substitution_write(obj: Substitution, data: dict, creating: bool):
+    from app.models import Card
+    from app.rules.cover import CoverDay, school_weekday
+    tt = db.session.get(Timetable, obj.timetable_id)
+    card = db.session.get(Card, obj.card_id)
+    if tt is None or card is None or card.timetable_id != tt.id:
+        raise ApiError("validation", 400, details={"field": "card_id", "reason": "not in this timetable"})
+    wd = school_weekday(obj.date)
+    if wd is None or card.weekday_id != wd.id or not (card.period_no <= obj.period_no < card.period_no + card.duration):
+        raise ApiError("validation", 400, details={"field": "period_no", "reason": "card not on that day/period",
+                                                     "message": "هذه الحصة ليست في هذا اليوم أو في هذه الحصة من الجدول"})
+    lesson = db.session.get(Lesson, card.lesson_id)
+    if obj.original_teacher_id not in lesson.teacher_ids:
+        raise ApiError("validation", 400, details={"field": "original_teacher_id", "reason": "not a teacher of this lesson"})
+    if obj.kind == "cover":
+        if obj.substitute_teacher_id is None:
+            raise ApiError("validation", 400, details={"field": "substitute_teacher_id", "reason": "required",
+                                                         "message": "اختر المعلم البديل"})
+        if obj.substitute_teacher_id in lesson.teacher_ids:
+            raise ApiError("validation", 400, details={"field": "substitute_teacher_id",
+                                                         "message": "المعلم البديل من معلمي الحصة نفسها"})
+        day = CoverDay(tt, obj.date)
+        t = db.session.get(Teacher, obj.substitute_teacher_id)
+        if t is None:
+            raise ApiError("validation", 400, details={"field": "substitute_teacher_id", "reason": "unknown_reference"})
+        name = f"{'المعلمة' if t.gender == 'f' else 'المعلم'} {t.name_ar}"
+        if obj.period_no in day.teaching.get(t.id, {}):
+            raise ApiError("substitute_busy", 409, details={"message": f"{name}: لديه حصة في الوقت نفسه" if t.gender != "f"
+                                                                     else f"{name}: لديها حصة في الوقت نفسه"})
+        if day.absence_of(t.id, obj.period_no):
+            raise ApiError("substitute_busy", 409, details={"message": f"{name}: {'غائبة' if t.gender == 'f' else 'غائب'} في هذه الحصة"})
+        if (t.id, obj.period_no) in day.covering(exclude_id=obj.id):
+            raise ApiError("substitute_busy", 409, details={"message": f"{name}: {'تغطي' if t.gender == 'f' else 'يغطي'} حصة أخرى في الوقت نفسه"})
+    elif obj.kind in ("cancel", "none"):
+        obj.substitute_teacher_id = None
+    if not creating:
+        obj.auto = False
+
+
 def _must_get(model, id_, field_name):
     obj = db.session.get(model, id_)
     if obj is None:
@@ -301,6 +370,11 @@ RESOURCES: dict[str, Resource] = {
                              create_only_fields=frozenset({"timetable_id"})),
     "exam-sessions": Resource(ExamSession, write_extra=_exam_write),
     "duty-assignments": Resource(DutyAssignment, write_extra=_duty_write),
+    "absences": Resource(TeacherAbsence, write_extra=_absence_write, before_delete=_absence_before_delete),
+    "substitutions": Resource(Substitution, write_extra=_substitution_write,
+                              read_only_fields=frozenset({"notified_at"}),
+                              create_only_fields=frozenset({"timetable_id", "date", "card_id", "period_no",
+                                                            "original_teacher_id"})),
     "constraint-rules": Resource(ConstraintRule, write_extra=_constraint_write,
                                  create_only_fields=frozenset({"timetable_id"})),
     "users": Resource(
@@ -411,7 +485,7 @@ def list_resource(res_name):
     for k, v in request.args.items():
         if k in cols and k not in res.hidden_fields:
             q = q.where(cols[k] == query_value(cols[k], k, v))
-    order = [c for c in ("exam_date", "starts_at", "sort_order", "name_ar", "slot_no", "created_at") if c in cols]
+    order = [c for c in ("exam_date", "date", "date_from", "period_no", "starts_at", "sort_order", "name_ar", "slot_no", "created_at") if c in cols]
     if order:
         q = q.order_by(*(cols[c] for c in order))
     items = db.session.scalars(q).all()
