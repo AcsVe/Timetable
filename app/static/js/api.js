@@ -94,7 +94,7 @@ export async function upload(url, file, { key, fields = {} } = {}) {
 export const post = (url, body, opts) => write('POST', url, body ?? {}, opts);
 export const patch = (url, body, opts) => write('PATCH', url, body, opts);
 export const put = (url, body, opts) => write('PUT', url, body, opts);
-export const del = (url, version, opts) => write('DELETE', `${url}?version=${version}`, undefined, opts);
+export const del = (url, version, opts = {}) => write('DELETE', `${url}?version=${version}${opts.cascade ? '&cascade=1' : ''}`, undefined, opts);
 
 /** Human-readable error text including per-field / per-conflict details. */
 export function errorText(e) {

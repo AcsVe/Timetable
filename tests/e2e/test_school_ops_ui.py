@@ -132,3 +132,41 @@ def test_generator_runs_in_the_background_and_opens_the_result(page, app):
         assert not page.errors
     finally:
         app.config["GENERATOR_MANUAL"] = True
+
+
+def test_delete_timetable_with_its_contents(page):
+    page.goto(f"{page.base}/#/timetables")
+    page.locator("td.actions").first.locator("button", has_text="نسخ كمسودة").click()
+    page.fill("#f-name", "مسودة للحذف")
+    page.click("#modal-form button[type=submit]")
+    row = page.locator("table.data tbody tr", has_text="مسودة للحذف")
+    row.locator("button", has_text="حذف").click()
+    page.click("#modal-form button.danger")                       # first question: delete it?
+    expect(page.locator("#modal-form")).to_contain_text("يحتوي على")   # then: what goes with it
+    expect(page.locator("#modal-form")).to_contain_text("دروس")
+    page.click("#modal-form button.danger")
+    expect(page.locator("#toast")).to_contain_text("حُذف الجدول")
+    expect(page.locator("table.data tbody tr", has_text="مسودة للحذف")).to_have_count(0)
+    assert not page.errors
+
+
+def test_rename_a_floor_and_add_a_corridor(page):
+    page.goto(f"{page.base}/#/duties")
+    page.click("text=+ مناوبة جديدة")
+    page.locator("#f-weekday_ids .multi-opts input").first.check()
+    page.fill("#f-duty_type", "الممرات")
+    page.fill("#f-location", "الطابق الأول › الممر الشرقي")
+    page.click("#modal-form button[type=submit]")
+    expect(page.locator("table.duty-grid")).to_contain_text("الممر الشرقي")
+    page.click("#edit-lists")
+    floors = page.locator("#list-locations .tree-node", has=page.locator("input.tree-main[value='الطابق الأول']"))
+    floors.locator("input.tree-main").fill("الطابق 1")
+    floors.locator("input.tree-sub").first.fill("ممر الإدارة")
+    floors.locator("button", has_text="+ ممر أو جزء").click()
+    page.keyboard.type("ممر المختبرات")
+    page.click("#modal-form button[type=submit]")
+    expect(page.locator("#toast")).to_contain_text("عُدِّلت السجلات المرتبطة: 1")
+    expect(page.locator("table.duty-grid")).to_contain_text("الطابق 1 › ممر الإدارة")
+    page.click("#edit-lists")
+    assert page.locator("#list-locations input.tree-sub").evaluate_all("xs => xs.map(x => x.value)").count("ممر المختبرات") == 1
+    assert not page.errors

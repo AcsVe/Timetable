@@ -5,7 +5,13 @@ import { lang, t } from '../i18n.js';
 import { byId, canEdit, currentTimetable, isAdmin, list } from '../store.js';
 import { bulkTable, confirmBox, h, nameOf, openForm, put, searchBox, swap, toast, toastError, matchesQuery, countBy, withCount } from '../ui.js';
 import { notifyDialog } from './notify.js';
-import { collectExtra, editModule, extraFields, extraLabel, extraText, extraValues, label, loadModule, placeSubFields, title } from './modconf.js';
+import { collectExtra, editLists, editModule, extraFields, extraLabel, extraText, extraValues, label, loadModule, placeSubFields, title } from './modconf.js';
+
+const DUTY_LISTS = [
+  ['duty_types', 'الغايات', 'مثل: الطابور الصباحي، الاستراحات، مغادرة الطلبة', { nested: false, itemLabel: 'غاية' }],
+  ['locations', 'المواقع: الطوابق والممرات', 'أضف الطابق أو المبنى عنصراً رئيسياً، ثم أضف تحته ممراته أو أجزاءه عناصرَ فرعية.', { itemLabel: 'موقع أو طابق', subLabel: 'ممر أو جزء' }],
+  ['time_labels', 'الفترات', 'مثل: قبل بدء الدوام، الاستراحة الأولى، نهاية الدوام', { nested: false, itemLabel: 'فترة' }],
+];
 
 const hm = x => (x ? String(x).slice(0, 5) : '');
 
@@ -191,13 +197,12 @@ export async function render(root) {
         } catch (e) { toastError(e); }
       } }, t('إبلاغ المناوبين')) : null,
       canEdit() && terms.length > 1 ? h('button', { class: 'btn ghost', onclick: copyFrom }, t('نسخ من فصل آخر')) : null,
+      isAdmin() ? h('button', { class: 'btn ghost', id: 'edit-lists', onclick: async () => {
+        if (await editLists(mod, DUTY_LISTS)) { mod = await loadModule('duties'); swap(root); render(root); }
+      } }, t('تعديل القوائم: الغايات والمواقع والفترات')) : null,
       isAdmin() ? h('button', { class: 'btn ghost', onclick: async () => {
-        if (await editModule(mod, { lists: [
-          ['duty_types', 'الغايات (عنصر في كل سطر)', 'مثل: الطابور الصباحي، الاستراحات، مغادرة الطلبة'],
-          ['locations', 'المواقع (عنصر في كل سطر، والعنصر الفرعي يبدأ بشرطة -)', 'مثال: الطابق الأول ثم في السطر التالي: - الممر الشرقي'],
-          ['time_labels', 'الفترات (عنصر في كل سطر)', 'مثل: قبل بدء الدوام، الاستراحة الأولى، نهاية الدوام'],
-        ] })) { mod = await loadModule('duties'); swap(root); render(root); }
-      } }, t('تخصيص الحقول والقوائم')) : null),
+        if (await editModule(mod)) { mod = await loadModule('duties'); swap(root); render(root); }
+      } }, t('تسميات الحقول والحقول الإضافية')) : null),
     issuesHost, host);
   await load();
 }

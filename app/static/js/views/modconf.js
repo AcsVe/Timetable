@@ -91,11 +91,168 @@ export function extraText(f, v, teacherName) {
 }
 
 // ---------------------------------------------------------------------------
+// List editor: every item (and sub-item, such as a corridor under its floor) can be added,
+// renamed, moved up or down and deleted. A renamed item is renamed in the saved records too.
+// ---------------------------------------------------------------------------
+/**
+ * items: ["الطابق الأول", "الطابق الأول › الممر الشرقي", …]; nested=false for a flat list.
+ * Returns { el, value() → items, renames() → {old: new}, count() }.
+ */
+export function listEditor(items, { nested = true, itemLabel = 'عنصر', subLabel = 'عنصر فرعي', id } = {}) {
+  const nodes = [];
+  const find = name => nodes.find(n => n.orig === name);
+  for (const it of items || []) {
+    const parts = String(it).split(SEP);
+    if (!nested || parts.length === 1) {
+      if (!find(it)) nodes.push({ name: it, orig: it, children: [] });
+      continue;
+    }
+    const head = parts[0];
+    const rest = parts.slice(1).join(SEP);
+    let p = find(head);
+    if (!p) { p = { name: head, orig: head, children: [], headingOnly: true }; nodes.push(p); }
+    if (!p.children.some(c => c.orig === rest)) p.children.push({ name: rest, orig: rest });
+  }
+  const el = h('div', { class: 'tree-edit', id });
+  const counter = h('p', { class: 'muted small count' });
+  const move = (arr, i, d) => { const j = i + d; if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; draw(); };
+  let focusNode = null;   // the item just added gets the cursor
+  const addAndFocus = (arr, at, node) => { arr.splice(at, 0, node); focusNode = node; draw(); };
+  function row(arr, i, node, sub, parent) {
+    const input = h('input', {
+      value: node.name, class: sub ? 'tree-sub' : 'tree-main',
+      'aria-label': sub ? `${t(subLabel)} — ${parent.name}` : t(itemLabel),
+      placeholder: sub ? t(subLabel) : t(itemLabel),
+      oninput: e => { node.name = e.target.value; recount(); },
+      onkeydown: e => {          // Enter adds the next item instead of submitting the whole dialog
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        addAndFocus(arr, i + 1, sub ? { name: '', orig: null } : { name: '', orig: null, children: [] });
+      },
+    });
+    if (focusNode === node) { focusNode = null; requestAnimationFrame(() => input.focus()); }
+    const renamed = node.orig !== null && node.name.trim() && node.name.trim() !== node.orig;
+    return h('div', { class: `tree-row${sub ? ' sub' : ''}` },
+      sub ? h('span', { class: 'tree-branch', 'aria-hidden': 'true' }, '↳') : null,
+      input,
+      renamed ? h('span', { class: 'chip warn small', title: `${t('كان')}: ${node.orig}` }, t('مُعدَّل')) : null,
+      h('button', { type: 'button', class: 'btn small ghost icon', title: t('نقل لأعلى'), 'aria-label': t('نقل لأعلى'), disabled: i === 0, onclick: () => move(arr, i, -1) }, '↑'),
+      h('button', { type: 'button', class: 'btn small ghost icon', title: t('نقل لأسفل'), 'aria-label': t('نقل لأسفل'), disabled: i === arr.length - 1, onclick: () => move(arr, i, 1) }, '↓'),
+      !sub && nested ? h('button', { type: 'button', class: 'btn small ghost', onclick: () => {
+        addAndFocus(node.children, node.children.length, { name: '', orig: null });
+      } }, `+ ${t(subLabel)}`) : null,
+      h('button', { type: 'button', class: 'btn small ghost danger-text', 'aria-label': `${t('حذف')} — ${node.name}`, onclick: () => {
+        arr.splice(i, 1); draw();
+      } }, t('حذف')));
+  }
+  function recount() {
+    const subs = nodes.reduce((a, n) => a + (n.children || []).length, 0);
+    counter.textContent = nested
+      ? `${t('العناصر الرئيسية')}: ${nodes.length} — ${t('العناصر الفرعية')}: ${subs}`
+      : `${t('العدد')}: ${nodes.length}`;
+  }
+  function draw() {
+    el.replaceChildren(counter,
+      ...nodes.map((n, i) => h('div', { class: 'tree-node' }, row(nodes, i, n, false),
+        ...(n.children || []).map((c, j) => row(n.children, j, c, true, n)))),
+      ...(nodes.length ? [] : [h('p', { class: 'muted small' }, t('القائمة فارغة'))]),
+      h('button', { type: 'button', class: 'btn small', onclick: () => {
+        addAndFocus(nodes, nodes.length, { name: '', orig: null, children: [] });
+      } }, `+ ${t(itemLabel)}`));
+    recount();
+  }
+  draw();
+  focusNode = null;
+  const clean = s => String(s || '').replace(/\s*[›>]\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  return {
+    el,
+    count: () => nodes.length,
+    value() {
+      const out = [];
+      for (const n of nodes) {
+        const name = clean(n.name);
+        if (!name) continue;
+        out.push(name);
+        for (const c of n.children || []) { const cn = clean(c.name); if (cn) out.push(`${name}${SEP}${cn}`); }
+      }
+      return [...new Set(out)];
+    },
+    renames() {
+      const map = {};
+      for (const n of nodes) {
+        const name = clean(n.name);
+        if (!name) continue;
+        if (n.orig !== null && n.orig !== name && !n.headingOnly) map[n.orig] = name;
+        for (const c of n.children || []) {
+          const cn = clean(c.name);
+          if (!cn || c.orig === null || n.orig === null) continue;
+          const from = `${n.orig}${SEP}${c.orig}`, to = `${name}${SEP}${cn}`;
+          if (from !== to) map[from] = to;
+        }
+      }
+      return map;
+    },
+  };
+}
+
+/** The whole saved configuration of a screen, ready for PUT (labels only where renamed). */
+function configValue(mod, over = {}) {
+  return {
+    title: mod.title,
+    labels: Object.fromEntries(Object.keys(mod.labels).filter(k => mod.labels[k].ar !== mod.default_labels[k].ar
+      || mod.labels[k].en !== mod.default_labels[k].en).map(k => [k, mod.labels[k]])),
+    lists: mod.lists,
+    extra_fields: mod.extra_fields,
+    ...over,
+  };
+}
+
+async function saveConfig(mod, value, renames) {
+  const r = await api.put(`/api/settings/module:${mod.name}`, { value, renames });
+  toast(r.renamed_records ? `${t('تم الحفظ')} — ${t('عُدِّلت السجلات المرتبطة')}: ${r.renamed_records}` : t('تم الحفظ'), 'ok');
+  return true;
+}
+
+/**
+ * The lists of a screen (duty purposes, locations with floors and corridors, time slots…), one
+ * editor each. lists: [[key, title, help, {nested, itemLabel, subLabel}]]
+ */
+export async function editLists(mod, lists, { only } = {}) {
+  if (!isAdmin()) return null;
+  const chosen = only ? lists.filter(([k]) => k === only) : lists;
+  const editors = {};
+  const host = h('div', { class: 'lists-editor full' },
+    h('p', { class: 'muted small' }, t('أضف أي عنصر أو عنصر فرعي، أو عدّل اسمه، أو رتّبه، أو احذفه، ثم اضغط «حفظ». وتغيير اسم عنصر يغيّره في كل السجلات المحفوظة التي تستخدمه. أما حذف عنصر فلا يحذف السجلات التي تستخدمه.')),
+    ...chosen.map(([k, title_, help, opts = {}]) => {
+      editors[k] = listEditor(mod.lists[k] || [], { ...opts, id: `list-${k}` });
+      return h('section', { class: 'list-block' }, h('h3', {}, t(title_)), help ? h('p', { class: 'muted small' }, t(help)) : null, editors[k].el);
+    }));
+  return openForm({
+    title: `${t('تعديل القوائم')} — ${title(mod)}`, fields: [], extra: host, submitLabel: t('حفظ القوائم'),
+    onSubmit: async () => {
+      const lists_ = { ...mod.lists };
+      const renames = {};
+      for (const [k, ed] of Object.entries(editors)) {
+        lists_[k] = ed.value();
+        const r = ed.renames();
+        if (Object.keys(r).length) renames[k] = r;
+      }
+      return saveConfig(mod, configValue(mod, { lists: lists_ }), renames);
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Editor: screen title, field labels, lists and extra fields — one dialog, saved at once.
 // ---------------------------------------------------------------------------
-export async function editModule(mod, { lists }) {
+export async function editModule(mod) {
   if (!isAdmin()) return null;
-  const rows = mod.extra_fields.map(f => ({ ...f, options: (f.options || []).join('\n') }));
+  const rows = mod.extra_fields.map(f => ({ ...f, options: [...(f.options || [])] }));
+  const optEditors = new Map();
+  const optionEditor = r => {
+    if (!optEditors.has(r)) optEditors.set(r, listEditor(r.options || [], { nested: false, itemLabel: 'خيار' }));
+    return optEditors.get(r);
+  };
   const host = h('div', { class: 'extra-editor full' });
   const fieldOpts = Object.keys(mod.labels).map(k => [k, label(mod, k)]);
   function draw() {
@@ -118,8 +275,7 @@ export async function editModule(mod, { lists }) {
           h('option', { value: 'room', selected: r.level === 'room' }, t('كل قاعة على حدة')))) : null,
         h('label', {}, t('نص توضيحي داخل الحقل'), h('input', { value: r.placeholder || '', placeholder: t('مثال: من 1 إلى 30'),
           'aria-label': t('نص توضيحي داخل الحقل'), oninput: e => { r.placeholder = e.target.value; } })),
-        r.type === 'select' ? h('label', { class: 'full' }, t('الخيارات (خيار في كل سطر)'),
-          h('textarea', { rows: 3, 'aria-label': t('الخيارات (خيار في كل سطر)'), oninput: e => { r.options = e.target.value; } }, r.options || '')) : null,
+        r.type === 'select' ? h('div', { class: 'full' }, h('b', {}, t('خيارات القائمة')), optionEditor(r).el) : null,
         h('label', { class: 'inline' }, h('input', { type: 'checkbox', checked: r.show_in_report !== false,
           onchange: e => { r.show_in_report = e.target.checked; } }), t('يظهر في التقرير المطبوع')),
         h('button', { type: 'button', class: 'btn small ghost', onclick: () => { rows.splice(i, 1); draw(); } }, t('حذف الحقل')))),
@@ -132,29 +288,33 @@ export async function editModule(mod, { lists }) {
   const fields = [
     { name: 'title_ar', label: t('اسم الشاشة والتقرير (عربي)'), required: true },
     { name: 'title_en', label: t('اسم الشاشة والتقرير (إنجليزي)') },
-    ...lists.map(([k, l, help]) => ({ name: `list:${k}`, label: t(l), type: 'textarea', full: true, help: t(help) })),
     ...Object.keys(mod.labels).map(k => ({ name: `label:${k}`, label: `${t('تسمية الحقل')}: ${mod.default_labels[k].ar}`,
                                            placeholder: mod.default_labels[k].ar })),
   ];
   const values = { title_ar: mod.title.ar, title_en: mod.title.en };
-  for (const [k] of lists) values[`list:${k}`] = listToText(mod.lists[k] || []);
   for (const k of Object.keys(mod.labels)) values[`label:${k}`] = mod.labels[k].ar === mod.default_labels[k].ar ? '' : mod.labels[k].ar;
   return openForm({
-    title: `${t('تخصيص الحقول والقوائم')} — ${title(mod)}`, fields, values, extra: host, submitLabel: t('حفظ التخصيص'),
+    title: `${t('تسميات الحقول والحقول الإضافية')} — ${title(mod)}`, fields, values, extra: host, submitLabel: t('حفظ التخصيص'),
     onSubmit: async v => {
-      const value = {
+      const renames = {};
+      const extra_fields = rows.filter(r => (r.label_ar || '').trim()).map(r => {
+        let options = [];
+        if (r.type === 'select') {
+          const ed = optionEditor(r);
+          options = ed.value();
+          const rn = ed.renames();
+          if (Object.keys(rn).length) renames[`x:${r.key}`] = rn;
+        }
+        return { key: r.key, label_ar: r.label_ar.trim(), label_en: (r.label_en || '').trim(), type: r.type || 'text',
+                 parent: r.parent || null, level: r.level || 'session', placeholder: r.placeholder || '',
+                 show_in_report: r.show_in_report !== false, options };
+      });
+      const value = configValue(mod, {
         title: { ar: v.title_ar || '', en: v.title_en || '' },
         labels: Object.fromEntries(Object.keys(mod.labels).filter(k => v[`label:${k}`]).map(k => [k, { ar: v[`label:${k}`], en: '' }])),
-        lists: Object.fromEntries(lists.map(([k]) => [k, textToList(v[`list:${k}`])])),
-        extra_fields: rows.filter(r => (r.label_ar || '').trim()).map(r => ({
-          key: r.key, label_ar: r.label_ar.trim(), label_en: (r.label_en || '').trim(), type: r.type || 'text',
-          parent: r.parent || null, level: r.level || 'session', placeholder: r.placeholder || '',
-          show_in_report: r.show_in_report !== false,
-          options: r.type === 'select' ? String(r.options || '').split('\n').map(x => x.trim()).filter(Boolean) : [] })),
-      };
-      await api.put(`/api/settings/module:${mod.name}`, { value });
-      toast(t('تم حفظ التخصيص'), 'ok');
-      return true;
+        extra_fields,
+      });
+      return saveConfig(mod, value, renames);
     },
   });
 }

@@ -7,7 +7,11 @@ import { byId, canEdit, currentTimetable, isAdmin, list } from '../store.js';
 import { bulkTable, confirmBox, h, nameOf, openForm, put, searchBox, swap, toast, toastError } from '../ui.js';
 import { noTimetable } from './ctx.js';
 import { notifyDialog } from './notify.js';
-import { collectExtra, editModule, extraFields, extraValues, label, loadModule, placeSubFields, title } from './modconf.js';
+import { collectExtra, editLists, editModule, extraFields, extraValues, label, loadModule, placeSubFields, title } from './modconf.js';
+
+const COVER_LISTS = [
+  ['reasons', 'أسباب الغياب', 'مثل: إجازة مرضية، مهمة رسمية، دورة تدريبية', { nested: false, itemLabel: 'سبب' }],
+];
 
 const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const addDays = (s, n) => { const d = new Date(`${s}T12:00:00`); d.setDate(d.getDate() + n); return iso(d); };
@@ -303,11 +307,12 @@ export async function render(root, _rest, params) {
       h('button', { class: 'btn ghost', onclick: () => report('cover-daily', 'pdf') }, t('طباعة ورقة اليوم PDF')),
       h('button', { class: 'btn ghost', onclick: () => report('cover-daily', 'xlsx') }, t('تصدير Excel')),
       h('button', { class: 'btn ghost', onclick: () => report('free-teachers', 'pdf') }, t('المتاحون في كل حصة')),
+      isAdmin() ? h('button', { class: 'btn ghost', id: 'edit-lists', onclick: async () => {
+        if (await editLists(mod, COVER_LISTS)) { mod = await loadModule('cover'); swap(root); render(root, _rest, params); }
+      } }, t('تعديل قائمة أسباب الغياب')) : null,
       isAdmin() ? h('button', { class: 'btn ghost', onclick: async () => {
-        if (await editModule(mod, { lists: [['reasons', 'أسباب الغياب (سبب في كل سطر)', 'مثل: إجازة مرضية، مهمة رسمية، دورة تدريبية']] })) {
-          mod = await loadModule('cover'); swap(root); render(root, _rest, params);
-        }
-      } }, t('تخصيص الحقول والقوائم')) : null),
+        if (await editModule(mod)) { mod = await loadModule('cover'); swap(root); render(root, _rest, params); }
+      } }, t('تسميات الحقول والحقول الإضافية')) : null),
     statsHost,
     h('h2', { class: 'section-title' }, t('المعلمون الغائبون')), absHost,
     h('h2', { class: 'section-title' }, t('الحصص التي تحتاج إلى قرار')), needsHost,

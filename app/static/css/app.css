@@ -319,6 +319,13 @@ input.narrow { width: 72px; }
   /* the page never scrolls sideways: wide tables scroll inside their own box */
   .view table.data { display: block; overflow-x: auto; max-width: 100%; }
   .view select, .view input { max-width: 100%; }
+  /* lists marked "stack" become one card per record on phones: nothing hides off-screen */
+  .view table.data.stack { display: table; }
+  table.data.stack thead { display: none; }
+  table.data.stack, table.data.stack tbody, table.data.stack tr, table.data.stack td { display: block; width: 100%; }
+  table.data.stack tr { border-bottom: 1px solid var(--line); padding: 6px 0; }
+  table.data.stack td { border: 0; padding: 4px 12px; }
+  table.data.stack td[data-label]:not(.actions)::before { content: attr(data-label) ": "; color: var(--muted); font-size: .85rem; }
   .toolbar { flex-wrap: wrap; }
   label.inline { flex-wrap: wrap; max-width: 100%; }
   label.inline select { min-width: 0; flex: 1 1 auto; }
@@ -366,3 +373,19 @@ select.decision { min-width: 200px; max-width: 320px; }
 .gen-metrics td.better { color: var(--ok); font-weight: 700; }
 .spinner { width: 16px; height: 16px; border: 3px solid var(--accent-2); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* row actions wrap instead of pushing the table sideways */
+td.actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn.danger-text { color: var(--err); border-color: currentColor; }
+#modal-form > p { white-space: pre-line; }
+/* list editor: items and sub-items (floors › corridors) */
+.lists-editor { display: grid; gap: 14px; }
+.list-block h3 { margin: 4px 0; }
+.tree-edit { display: grid; gap: 6px; }
+.tree-node { border: 1px solid var(--line); border-radius: 8px; padding: 6px; display: grid; gap: 4px; background: var(--panel); }
+.tree-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.tree-row input { flex: 1 1 120px; min-width: 0; }
+.tree-row.sub { padding-inline-start: 18px; }
+.tree-branch { color: var(--muted); }
+.btn.icon { min-width: 30px; padding-inline: 6px; }
+.chip.small { font-size: .72rem; }

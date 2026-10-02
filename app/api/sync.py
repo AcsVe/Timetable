@@ -82,10 +82,17 @@ def put_setting(key):
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or "value" not in data:
         raise ApiError("validation", 400, details={"field": "value"})
+    renamed = None
     if key.startswith("module:"):
-        from app.rules.modules import normalize_module_config
+        from app.rules.modules import apply_renames, normalize_module_config, normalize_renames
         data["value"] = normalize_module_config(key, data["value"])
+        renames = normalize_renames(key.split(":", 1)[1], data.get("renames"))
     row = db.session.get(AppSetting, key) or AppSetting(key=key)
     row.value = data["value"]
     db.session.add(row)
-    return {"key": key, "value": row.value}, 200
+    if key.startswith("module:"):
+        renamed = apply_renames(key.split(":", 1)[1], renames)   # renamed items follow into saved records
+    out = {"key": key, "value": row.value}
+    if renamed is not None:
+        out["renamed_records"] = renamed
+    return out, 200

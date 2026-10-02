@@ -12,7 +12,7 @@ MESSAGES = {
     "idempotency_key_required": ("يلزم إرسال الترويسة Idempotency-Key مع كل عملية تعديل", "Idempotency-Key header is required for every write"),
     "idempotency_key_reused": ("استُخدم معرّف العملية نفسه لطلب مختلف", "Idempotency key was reused for a different request"),
     "idempotency_in_progress": ("العملية نفسها قيد التنفيذ الآن", "The same request is already being processed"),
-    "has_dependents": ("تعذّر الحذف: توجد سجلات مرتبطة بهذا السجل", "Cannot delete: other records depend on it"),
+    "has_dependents": ("تعذّر الحذف: هذا السجل مستخدم في سجلات أخرى؛ احذفها أو عدّلها أولاً", "Cannot delete: other records use it; delete or change them first"),
     "duplicate": ("السجل موجود مسبقاً", "Record already exists"),
     "placement_conflict": ("تعذّر وضع الحصة هنا بسبب تعارض", "Cannot place the card here due to a conflict"),
     "timetable_readonly": ("هذا الجدول مؤرشف، ولا يمكن تعديله", "This timetable is archived and read-only"),

@@ -17,21 +17,24 @@ export async function render(root) {
   async function refresh() { invalidate('timetables'); await loadTimetables(); draw(); }
 
   function draw() {
+    const heads = [t('الاسم'), t('الفصل'), t('الحالة'), t('تاريخ النشر'), t('الإجراءات')];
+    const cell = (i, ...kids) => h('td', { 'data-label': heads[i] }, ...kids);
     const rows = state.timetables.map(tt => h('tr', {},
-      h('td', {}, tt.name, tt.id === state.ttId ? h('span', { class: 'chip' }, t('المعروض حالياً')) : null),
-      h('td', {}, tmap[tt.term_id] ? termLabel(tmap[tt.term_id]) : ''),
-      h('td', {}, h('span', { class: `chip status-${tt.status}` }, t(STATUS[tt.status]))),
-      h('td', {}, tt.published_at ? new Date(tt.published_at).toLocaleDateString() : ''),
-      h('td', { style: { whiteSpace: 'nowrap' } },
-        h('button', { class: 'btn small ghost', onclick: () => open(tt) }, t('فتح')), ' ',
+      cell(0, h('b', {}, tt.name), tt.id === state.ttId ? h('span', { class: 'chip' }, t('المعروض حالياً')) : null),
+      cell(1, tmap[tt.term_id] ? termLabel(tmap[tt.term_id]) : ''),
+      cell(2, h('span', { class: `chip status-${tt.status}` }, t(STATUS[tt.status]))),
+      cell(3, tt.published_at ? new Date(tt.published_at).toLocaleDateString() : '—'),
+      h('td', { class: 'actions', 'data-label': heads[4] },
+        h('button', { class: 'btn small ghost', onclick: () => open(tt) }, t('فتح')),
         isAdmin() ? [
-          h('button', { class: 'btn small ghost', onclick: () => copy(tt) }, t('نسخ كمسودة')), ' ',
-          tt.status !== 'published' ? h('button', { class: 'btn small', onclick: () => publish(tt) }, t('نشر')) : null, ' ',
-          h('button', { class: 'btn small ghost', onclick: () => rename(tt) }, t('تعديل')), ' ',
-          tt.status !== 'published' ? h('button', { class: 'btn small ghost', onclick: () => remove(tt) }, t('حذف')) : null] : null)));
+          h('button', { class: 'btn small ghost', onclick: () => copy(tt) }, t('نسخ كمسودة')),
+          tt.status !== 'published' ? h('button', { class: 'btn small', onclick: () => publish(tt) }, t('نشر')) : null,
+          h('button', { class: 'btn small ghost', onclick: () => rename(tt) }, t('تعديل الاسم')),
+          h('button', { class: 'btn small ghost danger-text', onclick: () => remove(tt) }, t('حذف'))] : null)));
     swap(host, state.timetables.length
-      ? h('table', { class: 'data' }, h('thead', {}, h('tr', {}, [t('الاسم'), t('الفصل'), t('الحالة'), t('تاريخ النشر'), ''].map(x => h('th', {}, x)))),
-          h('tbody', {}, rows))
+      ? [h('p', { class: 'muted small count' }, `${t('العدد')}: ${state.timetables.length}`),
+         h('table', { class: 'data stack' }, h('thead', {}, h('tr', {}, heads.map(x => h('th', {}, x)))),
+          h('tbody', {}, rows))]
       : h('p', { class: 'muted' }, t('لا يوجد جدول بعد. أنشئ سنةً دراسية وفصلاً دراسياً، ثم جدولاً جديداً.')));
   }
 
@@ -68,9 +71,28 @@ export async function render(root) {
     toast(t('تم النشر، وأُرشِف الجدول المنشور سابقاً'), 'ok');
     await refresh();
   }
+  // Deleting a timetable takes its contents with it (lessons, cards, unavailable times, rules, cover
+  // records). The first attempt asks the server what is inside; the second, after the user agrees, deletes all.
   async function remove(tt) {
-    if (!(await confirmBox(t('أتريد حذف هذا السجل؟')))) return;
-    try { await api.del(`/api/timetables/${tt.id}`, tt.version); await refresh(); } catch (e) { toastError(e); }
+    const name = `«${tt.name}»`;
+    let contents = null;
+    try {
+      if (!(await confirmBox(`${t('أتريد حذف الجدول')} ${name}؟`))) return;
+      await api.del(`/api/timetables/${tt.id}`, tt.version);
+    } catch (e) {
+      if (e.code !== 'has_dependents') { toastError(e); return; }
+      contents = e.details || {};
+    }
+    if (contents) {
+      const parts = Object.entries(contents).filter(([k]) => k !== 'id').map(([k, n]) => `${t(k)}: ${n}`);
+      const warn = tt.status === 'published' ? `\n${t('تنبيه: هذا هو الجدول المنشور للفصل، وسيبقى الفصل بلا جدول منشور حتى تنشر غيره.')}` : '';
+      if (!(await confirmBox(`${t('الجدول')} ${name} ${t('يحتوي على')}: ${parts.join('، ')}.\n${t('سيُحذف الجدول مع كل محتوياته، ولا يؤثر ذلك في الجداول الأخرى ولا في البيانات الأساسية (المعلمين والمباحث والشعب).')}${warn}\n${t('أتريد المتابعة؟')}`))) return;
+      try { await api.del(`/api/timetables/${tt.id}`, tt.version, { cascade: true }); }
+      catch (e) { toastError(e); return; }
+    }
+    if (state.ttId === tt.id) { state.ttId = null; try { localStorage.removeItem('ttId'); } catch (_) { /* ignore */ } }
+    toast(`${t('حُذف الجدول')} ${name}`, 'ok');
+    await refresh();
   }
 
   put(root, h('h1', { class: 'title' }, t('الجداول')),

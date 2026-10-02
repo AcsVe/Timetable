@@ -187,3 +187,79 @@ def load_module(name: str) -> dict:
     from app.models import AppSetting
     row = db.session.get(AppSetting, f"module:{name}")
     return module_config(name, row.value if row else None)
+
+
+# Which record column holds the values of each list, so renaming an item renames it everywhere.
+LIST_COLUMNS = {
+    "duties": {"duty_types": "duty_type", "locations": "location", "time_labels": "time_label"},
+    "exams": {"session_labels": "session_label", "locations": "rooms.location"},
+    "cover": {"reasons": "reason"},
+}
+
+
+def normalize_renames(name: str, renames) -> dict[str, dict[str, str]]:
+    """{"locations": {"الطابق الأول › الممر الشرقي": "الطابق 1 › الممر أ"}, "x:<field>": {old: new}}"""
+    if renames is None:
+        return {}
+    if not isinstance(renames, dict):
+        raise _bad("renames", "must be an object")
+    out = {}
+    for k, pairs in renames.items():
+        if k not in LIST_KEYS[name] and not re.fullmatch(r"x:[a-z][a-z0-9_]{0,30}", str(k)):
+            raise _bad(f"renames.{k}", "unknown list")
+        if not isinstance(pairs, dict) or len(pairs) > MAX_ITEMS:
+            raise _bad(f"renames.{k}", "must be {old: new}")
+        clean = {}
+        for old, new in pairs.items():
+            o = clean_path(_text(old, f"renames.{k}", 200))
+            n = clean_path(_text(new, f"renames.{k}", 200))
+            if o and n and o != n:
+                clean[o] = n
+        if clean:
+            out[k] = clean
+    return out
+
+
+def apply_renames(name: str, renames: dict[str, dict[str, str]]) -> int:
+    """Rewrite the saved records that use a renamed item. Returns how many records changed."""
+    if not renames:
+        return 0
+    from sqlalchemy import select
+    from app.extensions import db
+    from app.models import DutyAssignment, ExamSession, TeacherAbsence
+    model = {"duties": DutyAssignment, "exams": ExamSession, "cover": TeacherAbsence}[name]
+    changed = 0
+    for row in db.session.scalars(select(model).where(model.deleted_at.is_(None))):
+        touched = False
+        for key, pairs in renames.items():
+            if key.startswith("x:"):
+                f = key[2:]
+                if (row.extra or {}).get(f) in pairs:
+                    row.extra = {**row.extra, f: pairs[row.extra[f]]}
+                    touched = True
+                if name == "exams":
+                    rooms = [dict(r) for r in (row.rooms or [])]
+                    hit = False
+                    for r in rooms:
+                        if (r.get("extra") or {}).get(f) in pairs:
+                            r["extra"] = {**r["extra"], f: pairs[r["extra"][f]]}
+                            hit = True
+                    if hit:
+                        row.rooms, touched = rooms, True
+                continue
+            col = LIST_COLUMNS[name][key]
+            if col == "rooms.location":
+                rooms = [dict(r) for r in (row.rooms or [])]
+                hit = False
+                for r in rooms:
+                    if r.get("location") in pairs:
+                        r["location"] = pairs[r["location"]]
+                        hit = True
+                if hit:
+                    row.rooms, touched = rooms, True
+            elif getattr(row, col) in pairs:
+                setattr(row, col, pairs[getattr(row, col)])
+                touched = True
+        changed += touched
+    db.session.flush()
+    return changed

@@ -130,6 +130,49 @@ const I18N = {
   'الأيام صفوفاً (نمط ASC)': 'Days as rows (ASC style)',
   'الأيام أعمدةً ': 'Days as columns',
   'الموقع': 'Location', 'English': 'العربية',
+  'أتريد المتابعة؟': 'Do you want to continue?',
+  'أتريد حذف الجدول': 'Delete the timetable',
+  'أسباب الغياب': 'Absence reasons',
+  'أضف أي عنصر أو عنصر فرعي، أو عدّل اسمه، أو رتّبه، أو احذفه، ثم اضغط «حفظ». وتغيير اسم عنصر يغيّره في كل السجلات المحفوظة التي تستخدمه. أما حذف عنصر فلا يحذف السجلات التي تستخدمه.': 'Add any item or sub-item, rename it, reorder it or delete it, then press “Save”. Renaming an item renames it in every saved record that uses it; deleting an item does not delete those records.',
+  'أضف الطابق أو المبنى عنصراً رئيسياً، ثم أضف تحته ممراته أو أجزاءه عناصرَ فرعية.': 'Add the floor or building as a main item, then add its corridors or parts under it as sub-items.',
+  'أضف المبنى عنصراً رئيسياً، ثم أضف تحته طوابقه أو أجنحته عناصرَ فرعية.': 'Add the building as a main item, then add its floors or wings under it as sub-items.',
+  'الإجراءات': 'Actions',
+  'الجلسات': 'Sessions',
+  'العدد': 'Count',
+  'العناصر الرئيسية': 'Main items',
+  'العناصر الفرعية': 'Sub-items',
+  'الغايات': 'Purposes',
+  'الفترات': 'Time slots',
+  'القائمة فارغة': 'The list is empty',
+  'المواقع: الطوابق والممرات': 'Locations: floors and corridors',
+  'المواقع: المباني والطوابق': 'Locations: buildings and floors',
+  'تسميات الحقول والحقول الإضافية': 'Field labels and extra fields',
+  'تعديل القوائم': 'Edit lists',
+  'تعديل القوائم: الجلسات والمواقع': 'Edit lists: sessions and locations',
+  'تعديل القوائم: الغايات والمواقع والفترات': 'Edit lists: purposes, locations and time slots',
+  'تعديل قائمة أسباب الغياب': 'Edit absence reasons',
+  'تنبيه: هذا هو الجدول المنشور للفصل، وسيبقى الفصل بلا جدول منشور حتى تنشر غيره.': 'Note: this is the published timetable of the term; the term will have no published timetable until you publish another.',
+  'جلسة': 'Session',
+  'حفظ القوائم': 'Save lists',
+  'حُذف الجدول': 'Timetable deleted',
+  'خيارات القائمة': 'List options',
+  'سبب': 'Reason',
+  'سيُحذف الجدول مع كل محتوياته، ولا يؤثر ذلك في الجداول الأخرى ولا في البيانات الأساسية (المعلمين والمباحث والشعب).': 'The timetable will be deleted with all its contents. Other timetables and the basic data (teachers, subjects, sections) are not affected.',
+  'طابق أو جناح': 'Floor or wing',
+  'عُدِّلت السجلات المرتبطة': 'Records updated',
+  'غاية': 'Purpose',
+  'فترة': 'Time slot',
+  'كان': 'Was',
+  'مبنى أو موقع': 'Building or location',
+  'ممر أو جزء': 'Corridor or part',
+  'موقع أو طابق': 'Location or floor',
+  'مُعدَّل': 'Renamed',
+  'نقل لأسفل': 'Move down',
+  'نقل لأعلى': 'Move up',
+  'يحتوي على': 'contains',
+  'خيار': 'Option',
+  'عنصر': 'Item',
+  'عنصر فرعي': 'Sub-item',
   grade: 'grades', section: 'sections', lesson: 'lessons', card: 'cards', teacher: 'teachers',
   'CSV: جدول واحد بالعناوين نفسها، ويُقبل الترميز UTF-8 وترميز ويندوز العربي.': 'CSV: a single table with the same headings; UTF-8 and Windows Arabic encodings are accepted.',
   'Excel ‏(‎.xlsx): استخدم القالب الجاهز؛ لكل نوع من البيانات ورقة مستقلة.': 'Excel (.xlsx): use the ready-made template; one sheet per kind of data.',
@@ -654,15 +697,25 @@ function readLang() {
 }
 export let lang = readLang();
 
+const TABLES_AR = { grade: 'صفوف', section: 'شعب', lesson: 'دروس', card: 'بطاقات (حصص)', teacher: 'معلمون', division: 'تقسيمات',
+  student_group: 'مجموعات', term: 'فصول دراسية', timetable: 'جداول', bell_assignment: 'توقيت مرتبط',
+  exam_session: 'امتحانات', duty_assignment: 'مناوبات', constraint_rule: 'قواعد',
+  teacher_absence: 'غياب مسجّل', substitution: 'حصص إشغال', student: 'طلبة', generator_run: 'تشغيلات المولّد',
+  availability: 'أوقات عدم توفر', lesson_teacher: 'دروس يدرّسها', lesson_target: 'دروس مرتبطة', subject: 'مباحث',
+  room: 'قاعات', building: 'مبانٍ', stage: 'مراحل', academic_year: 'سنوات دراسية', bell_schedule: 'برامج توقيت',
+  app_user: 'مستخدمون', weekday: 'أيام' };
+const TABLES_EN = { availability: 'unavailable times', constraint_rule: 'rules', substitution: 'cover records',
+  lesson_teacher: 'lessons taught', lesson_target: 'linked lessons', exam_session: 'exams', duty_assignment: 'duties',
+  teacher_absence: 'absences', student: 'students', subject: 'subjects', room: 'rooms', building: 'buildings',
+  stage: 'stages', term: 'terms', timetable: 'timetables', division: 'divisions', student_group: 'groups',
+  academic_year: 'academic years', bell_schedule: 'bell schedules', bell_assignment: 'linked bell times' };
+
 export function t(ar) {
   if (lang !== 'en') {
     // Arabic UI: map technical table names (used in dependency errors) to Arabic.
-    return { grade: 'صفوف', section: 'شعب', lesson: 'دروس', card: 'بطاقات', teacher: 'معلمون', division: 'تقسيمات',
-             student_group: 'مجموعات', term: 'فصول', timetable: 'جداول', bell_assignment: 'توقيت مرتبط',
-             exam_session: 'امتحانات', duty_assignment: 'مناوبات', constraint_rule: 'قواعد',
-             teacher_absence: 'غياب مسجّل', substitution: 'حصص إشغال', student: 'طلبة', generator_run: 'تشغيلات المولّد' }[ar] || ar;
+    return TABLES_AR[ar] || ar;
   }
-  return I18N[ar] ?? ar;
+  return I18N[ar] ?? TABLES_EN[ar] ?? ar;
 }
 
 // Counted nouns with correct Arabic agreement: 1 → «بطاقة واحدة»، 2 → «بطاقتان»، 3–10 → «3 بطاقات»، 11+ → «11 بطاقة».

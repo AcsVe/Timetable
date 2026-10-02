@@ -5,7 +5,12 @@ import { lang, t } from '../i18n.js';
 import { byId, canEdit, currentTimetable, isAdmin, list } from '../store.js';
 import { bulkTable, confirmBox, h, multiPicker, nameOf, openForm, put, searchBox, swap, toast, toastError, countBy, withCount } from '../ui.js';
 import { notifyDialog } from './notify.js';
-import { collectExtra, editModule, extraFields, extraLabel, extraText, extraValues, label, loadModule, placeSubFields, title } from './modconf.js';
+import { collectExtra, editLists, editModule, extraFields, extraLabel, extraText, extraValues, label, loadModule, placeSubFields, title } from './modconf.js';
+
+const EXAM_LISTS = [
+  ['session_labels', 'الجلسات', 'مثل: الجلسة الأولى، الجلسة الثانية', { nested: false, itemLabel: 'جلسة' }],
+  ['locations', 'المواقع: المباني والطوابق', 'أضف المبنى عنصراً رئيسياً، ثم أضف تحته طوابقه أو أجنحته عناصرَ فرعية.', { itemLabel: 'مبنى أو موقع', subLabel: 'طابق أو جناح' }],
+];
 
 const DAY_NAMES = { ar: ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'],
                     en: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] };
@@ -228,12 +233,12 @@ export async function render(root) {
         } catch (e) { toastError(e); }
       } }, t('إبلاغ المراقبين')) : null,
       canEdit() && terms.length > 1 ? h('button', { class: 'btn ghost', onclick: copyFrom }, t('نسخ من فصل آخر')) : null,
+      isAdmin() ? h('button', { class: 'btn ghost', id: 'edit-lists', onclick: async () => {
+        if (await editLists(mod, EXAM_LISTS)) { mod = await loadModule('exams'); swap(root); render(root); }
+      } }, t('تعديل القوائم: الجلسات والمواقع')) : null,
       isAdmin() ? h('button', { class: 'btn ghost', onclick: async () => {
-        if (await editModule(mod, { lists: [
-          ['session_labels', 'قائمة الجلسات (عنصر في كل سطر)', 'مثل: الجلسة الأولى، الجلسة الثانية'],
-          ['locations', 'قائمة المواقع (عنصر في كل سطر، والعنصر الفرعي يبدأ بشرطة -)', 'مثال: المبنى الرئيسي ثم في السطر التالي: - الطابق الأول'],
-        ] })) { mod = await loadModule('exams'); swap(root); render(root); }
-      } }, t('تخصيص الحقول والقوائم')) : null),
+        if (await editModule(mod)) { mod = await loadModule('exams'); swap(root); render(root); }
+      } }, t('تسميات الحقول والحقول الإضافية')) : null),
     issuesHost, host);
   await load();
 }

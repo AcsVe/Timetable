@@ -31,12 +31,14 @@ from app.models import (
     BellSchedule,
     BellSlot,
     Building,
+    Card,
     ConstraintRule,
     Division,
     DutyAssignment,
     ExamSession,
     Grade,
     Lesson,
+    Occupancy,
     Room,
     School,
     Section,
@@ -186,6 +188,30 @@ def _user_read(obj: AppUser) -> dict:
 def _user_before_delete(obj: AppUser):
     if obj.id == current_user.id:
         raise ApiError("validation", 400, details={"reason": "cannot_delete_yourself"})
+
+
+def _timetable_before_delete(tt: Timetable):
+    """DELETE /api/timetables/<id>?cascade=1 removes the timetable with everything inside it (lessons,
+    cards, unavailable times, rules, cover records, generator history). Without cascade=1 a timetable
+    that still has contents is refused, and the refusal lists them so the screen can ask first."""
+    if request.args.get("cascade") not in ("1", "true"):
+        return
+    require_admin(current_user)
+    from sqlalchemy import delete as sql_delete
+    from sqlalchemy import update as sql_update
+    from app.models import GeneratorRun, Substitution
+    db.session.execute(sql_delete(Occupancy).where(Occupancy.timetable_id == tt.id))
+    for model in (Substitution, Card, Lesson, Availability, ConstraintRule):
+        for row in db.session.scalars(select(model).where(model.timetable_id == tt.id, model.deleted_at.is_(None))):
+            row.soft_delete()
+    for run in db.session.scalars(select(GeneratorRun).where(GeneratorRun.timetable_id == tt.id,
+                                                             GeneratorRun.deleted_at.is_(None))):
+        run.soft_delete()
+    gt = GeneratorRun.__table__
+    db.session.execute(sql_update(gt).where(gt.c.result_timetable_id == tt.id).values(result_timetable_id=None))
+    for other in db.session.scalars(select(Timetable).where(Timetable.based_on_id == tt.id)):
+        other.based_on_id = None
+    db.session.flush()
 
 
 def _timetable_child_guard(obj):
@@ -400,6 +426,7 @@ RESOURCES: dict[str, Resource] = {
         Timetable,
         read_only_fields=frozenset({"status", "published_at", "published_by", "based_on_id"}),
         create_only_fields=frozenset({"term_id"}),
+        before_delete=_timetable_before_delete,
     ),
     "availability": Resource(Availability, write_extra=_availability_write,
                              create_only_fields=frozenset({"timetable_id"})),
