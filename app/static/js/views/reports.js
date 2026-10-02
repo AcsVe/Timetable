@@ -2,7 +2,7 @@
 import * as api from '../api.js';
 import { lang, t } from '../i18n.js';
 import { byId, currentTimetable, list } from '../store.js';
-import { h, nameOf, pageNav, put, swap, toastError } from '../ui.js';
+import { allOption, h, nameOf, pageNav, put, swap, toastError } from '../ui.js';
 import { noTimetable } from './ctx.js';
 
 const ALL = ['stage_id', 'grade_id', 'section_id', 'teacher_id', 'subject_id'];
@@ -109,7 +109,7 @@ export async function render(root) {
         if (k === 'stage_id') { delete filters.grade_id; delete filters.section_id; }
         if (k === 'grade_id') delete filters.section_id;
         persist(); drawFilters(); load();
-      } }, h('option', { value: '' }, t('الكل')),
+      } }, allOption(options[k]().length),
         options[k]().map(o => h('option', { value: o.value, selected: o.value === filters[k] }, o.label))))));
   }
 
@@ -204,7 +204,8 @@ function renderReport(rep) {
     const titleText = tb.title && tb.title !== rep.title ? tb.title : '';
     blocks.push(h('section', { class: 'report-block', id: blockId(tb.title || rep.title) }, titleText ? h('h3', {}, titleText) : null,
       tb.subtitle ? h('div', { class: 'muted' }, tb.subtitle) : null,
-      h('div', { class: 'grid-scroll' }, h('table', { class: `data report-table${tb.compact ? ' compact' : ''}` }, thead, h('tbody', {}, rows)))));
+      h('div', { class: 'grid-scroll' }, h('table', { class: `data report-table${tb.compact ? ' compact' : ''}` }, thead, h('tbody', {}, rows))),
+      h('p', { class: 'legend count-line' }, `${t('عدد الصفوف')}: ${tb.rows.length}`)));
   }
   for (const n of rep.notes || []) blocks.push(h('p', { class: 'legend' }, n));
   if (rep.signature && rep.signature.length && blocks.length) {

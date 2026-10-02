@@ -146,21 +146,32 @@ export function multiPicker(f, value, id) {
   if (!opts.length) return h('div', { class: 'multi', id, dataset: { multi: f.name } }, h('span', { class: 'muted' }, t('لا توجد عناصر')));
   const list = h('div', { class: 'multi-opts' }, opts.map(o => h('label', { dataset: { text: String(o.label).toLowerCase() } },
     h('input', { type: 'checkbox', value: o.value, checked: set.has(String(o.value)), 'aria-label': o.label }), o.label)));
-  const count = h('span', { class: 'muted small' });
-  const recount = () => { count.textContent = `${t('المحدد')}: ${list.querySelectorAll('input:checked').length}`; };
+  const count = h('span', { class: 'muted small count' });
+  const recount = () => { count.textContent = `${t('المحدد')}: ${list.querySelectorAll('input:checked').length} ${t('من')} ${opts.length}`; };
   list.addEventListener('change', recount);
   recount();
   const visible = () => [...list.querySelectorAll('label')].filter(l => !l.hidden).map(l => l.querySelector('input'));
-  const tools = opts.length > 8 ? h('div', { class: 'multi-tools' },
-    h('input', { type: 'search', placeholder: t('ابحث في القائمة…'), 'aria-label': `${t('ابحث')} — ${f.label}`,
+  const tools = h('div', { class: 'multi-tools' },
+    opts.length > 8 ? h('input', { type: 'search', placeholder: t('ابحث في القائمة…'), 'aria-label': `${t('ابحث')} — ${f.label}`,
                  oninput: e => {
                    const q = e.target.value.trim().toLowerCase();
                    list.querySelectorAll('label').forEach(l => { l.hidden = !!q && !l.dataset.text.includes(q); });
-                 } }),
-    h('button', { type: 'button', class: 'btn small ghost', onclick: () => { visible().forEach(i => { i.checked = true; }); recount(); } }, t('تحديد الظاهر')),
-    h('button', { type: 'button', class: 'btn small ghost', onclick: () => { visible().forEach(i => { i.checked = false; }); recount(); } }, t('إلغاء التحديد')),
-    count) : null;
+                 } }) : null,
+    opts.length > 1 ? h('button', { type: 'button', class: 'btn small ghost', onclick: () => { visible().forEach(i => { i.checked = true; }); recount(); } },
+      opts.length > 8 ? t('تحديد الظاهر') : t('تحديد الكل')) : null,
+    opts.length > 1 ? h('button', { type: 'button', class: 'btn small ghost', onclick: () => { visible().forEach(i => { i.checked = false; }); recount(); } }, t('إلغاء التحديد')) : null,
+    count);
   return h('div', { class: 'multi', id, dataset: { multi: f.name }, role: 'group', 'aria-label': f.label }, tools, list);
+}
+
+/** "Label (n)" for any option that stands for several records; «الكل (n)» for the all-option. */
+export const withCount = (label, n) => (n === undefined || n === null ? label : `${label} (${n})`);
+export const allOption = (n, label) => h('option', { value: '' }, withCount(label || t('الكل'), n));
+/** Count records by a key: countBy(items, x => x.section_id) → {id: n}. Keys may be arrays. */
+export function countBy(items, key) {
+  const out = {};
+  for (const x of items) for (const k of [].concat(key(x) ?? [])) if (k != null) out[k] = (out[k] || 0) + 1;
+  return out;
 }
 
 /** Live search box (filters while typing — also on phones). */
@@ -183,8 +194,13 @@ export function bulkTable({ items, columns, text, actions, onBulkDelete, emptyTe
   const selected = new Set();
   const host = h('div');
   const bar = h('div', { class: 'bulk-bar', hidden: true });
+  const countLine = h('div', { class: 'count-line muted small', role: 'status' });
   function draw() {
     const shown = all.filter(x => matchesQuery(text ? text(x) : '', q));
+    countLine.textContent = [
+      q ? `${t('المعروض')}: ${shown.length} ${t('من')} ${all.length}` : `${t('العدد الإجمالي')}: ${all.length}`,
+      selected.size ? `${t('المحدد')}: ${selected.size}` : ''].filter(Boolean).join(' — ');
+    countLine.hidden = !all.length;
     for (const id of [...selected]) if (!all.some(x => x.id === id)) selected.delete(id);
     const head = h('input', { type: 'checkbox', 'aria-label': t('تحديد الكل'), title: t('تحديد الكل'),
       checked: shown.length > 0 && shown.every(x => selected.has(x.id)),
@@ -216,7 +232,7 @@ export function bulkTable({ items, columns, text, actions, onBulkDelete, emptyTe
   }
   draw();
   return {
-    el: h('div', {}, bar, host),
+    el: h('div', {}, bar, countLine, host),
     setQuery(v) { q = v; draw(); },
     setItems(v) { all = v; draw(); },
     selected: () => all.filter(x => selected.has(x.id)),

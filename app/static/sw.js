@@ -6,7 +6,7 @@
  *  - writes are never queued here: offline saves are refused with a clear message.
  * Bump VERSION when static files change.
  */
-const VERSION = '2026.10.02-3';
+const VERSION = '2026.10.02-4';
 const SHELL = `shell-${VERSION}`;
 const FONTS = 'fonts-v1';
 const PRECACHE = [
@@ -51,6 +51,27 @@ self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys => Promise.all(keys.filter(k => k !== SHELL && k !== FONTS).map(k => caches.delete(k))))
       .then(() => self.clients.claim()));
+});
+
+// Web Push: show the alert even when the app is closed; a tap opens (or focuses) the right page.
+self.addEventListener('push', event => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (_) { data = { title: event.data && event.data.text() }; }
+  event.waitUntil(self.registration.showNotification(data.title || 'جدولة الحصص', {
+    body: data.body || '', icon: '/static/icons/icon-192.png', badge: '/static/icons/icon-192.png',
+    dir: 'rtl', lang: 'ar', tag: data.tag || undefined, data: { url: data.url || '/' },
+  }));
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const target = new URL(event.notification.data && event.notification.data.url || '/', self.location.origin).href;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) {
+      if (new URL(c.url).origin === self.location.origin && 'focus' in c) { c.navigate(target).catch(() => {}); return c.focus(); }
+    }
+    return self.clients.openWindow(target);
+  }));
 });
 
 self.addEventListener('fetch', event => {

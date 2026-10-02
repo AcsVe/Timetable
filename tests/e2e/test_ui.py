@@ -8,7 +8,8 @@ def open_grid(page, section_label):
     page.goto(f"{page.base}/#/grid")
     page.wait_for_selector("#grid-entity")
     page.select_option("#grid-mode", "section")
-    page.select_option("#grid-entity", label=section_label)
+    value = page.locator(f"#grid-entity option[data-label='{section_label}']").get_attribute("value")
+    page.select_option("#grid-entity", value)
     page.wait_for_selector(".tray")
 
 
@@ -179,7 +180,7 @@ def test_whole_school_view_places_only_in_the_cards_rows(page):
     page.goto(f"{page.base}/#/grid")
     page.select_option("#grid-mode", "whole-sections")
     expect(page.locator("table.tt-grid.whole tbody tr")).to_have_count(6)
-    page.select_option("#grid-stage", label="الأساسية")
+    page.select_option("#grid-stage", page.locator("#grid-stage option", has_text="الأساسية").get_attribute("value"))
     expect(page.locator("table.tt-grid.whole tbody tr")).to_have_count(4)
     rows = page.locator("table.tt-grid.whole tbody tr")
     row_5a = rows.nth(0)

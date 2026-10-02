@@ -1,7 +1,7 @@
 import * as api from './api.js';
 import { captureStaticText, lang, setLang, t, onLangChange } from './i18n.js';
 import { state, isAdmin } from './store.js';
-import { h, jumpTo, put, toastError } from './ui.js';
+import { h, jumpTo, put, swap, toast, toastError } from './ui.js';
 
 const ROUTES = {
   home: () => import('./views/home.js'),
@@ -177,6 +177,46 @@ async function refreshNotifications() {
     return r;
   } catch (_) { return null; }
 }
+// Phone / computer alerts (Web Push) for this device.
+const b64ToBytes = s => { const b = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(b, c => c.charCodeAt(0)); };
+async function pushPanel() {
+  const box = h('div', { class: 'push-box' });
+  if (!('serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window)) {
+    return h('p', { class: 'muted small' }, t('هذا المتصفح لا يدعم تنبيهات الجهاز. على iPhone وiPad: أضف النظام إلى الشاشة الرئيسية ثم افتحه من أيقونته.'));
+  }
+  const reg = await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(() => r(null), 3000))]);
+  if (!reg) return h('p', { class: 'muted small' }, t('تنبيهات الجهاز غير متاحة الآن؛ أعد تحميل الصفحة.'));
+  async function draw() {
+    const sub = await reg.pushManager.getSubscription();
+    const denied = Notification.permission === 'denied';
+    swap(box,
+      h('span', { class: `chip ${sub ? 'ok' : ''}` }, sub ? t('تنبيهات هذا الجهاز مفعّلة') : t('تنبيهات هذا الجهاز غير مفعّلة')),
+      denied ? h('span', { class: 'reasons small' }, t('رُفض الإذن في المتصفح؛ اسمح بالإشعارات لهذا الموقع من إعدادات المتصفح.')) : null,
+      !sub && !denied ? h('button', { type: 'button', class: 'btn small', id: 'push-enable', onclick: async () => {
+        try {
+          if (await Notification.requestPermission() !== 'granted') { draw(); return; }
+          const key = await api.get('/api/push/key');
+          const s2 = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key.public_key) });
+          await api.post('/api/push/subscribe', s2.toJSON());
+          toast(t('فُعِّلت التنبيهات على هذا الجهاز'), 'ok');
+        } catch (e) { toastError(e); }
+        draw();
+      } }, t('تفعيل التنبيهات على هذا الجهاز')) : null,
+      sub ? h('button', { type: 'button', class: 'btn small ghost', onclick: async () => {
+        try { const r = await api.post('/api/push/test', {}); toast(`${t('أُرسل تنبيه التجربة إلى أجهزتك')}: ${r.sent}`, r.sent ? 'ok' : 'err'); }
+        catch (e) { toastError(e); }
+      } }, t('تنبيه تجربة')) : null,
+      sub ? h('button', { type: 'button', class: 'btn small ghost', onclick: async () => {
+        try { await api.post('/api/push/unsubscribe', { endpoint: sub.endpoint }); await sub.unsubscribe(); toast(t('أُوقفت التنبيهات على هذا الجهاز'), 'ok'); }
+        catch (e) { toastError(e); }
+        draw();
+      } }, t('إيقاف التنبيهات على هذا الجهاز')) : null);
+  }
+  await draw();
+  return box;
+}
+
 function setupNotifications() {
   const btn = document.getElementById('notif-btn');
   if (!btn) return;
@@ -188,7 +228,7 @@ function setupNotifications() {
     const form = document.getElementById('modal-form');
     form.innerHTML = '';
     const items = r ? r.items : [];
-    put(form, h('h2', {}, t('الإشعارات')),
+    put(form, h('h2', {}, t('الإشعارات')), await pushPanel(),
       items.length ? items.map(n => h('div', { class: `msg-card${n.read ? '' : ' unread'}` },
         h('div', { class: 'toolbar' }, h('b', {}, lang === 'en' && n.title_en ? n.title_en : n.title_ar),
           h('span', { class: 'muted small', dir: 'ltr' }, (n.created_at || '').slice(0, 16).replace('T', ' ')),

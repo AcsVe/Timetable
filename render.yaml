@@ -33,3 +33,7 @@ services:
         sync: false
       - key: MS_MAIL_SENDER
         sync: false   # e.g. timetable@school.edu.jo
+      - key: VAPID_PRIVATE_KEY
+        sync: false   # optional: device alerts keys (generated automatically when empty)
+      - key: VAPID_PUBLIC_KEY
+        sync: false

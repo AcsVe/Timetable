@@ -2,7 +2,7 @@
 import * as api from '../api.js';
 import { t } from '../i18n.js';
 import { canEdit } from '../store.js';
-import { bulkTable, confirmBox, h, nameOf, openForm, searchBox, toast, toastError, put, swap } from '../ui.js';
+import { allOption, bulkTable, confirmBox, countBy, h, nameOf, openForm, searchBox, toast, toastError, put, swap, withCount } from '../ui.js';
 import { loadContext, noTimetable } from './ctx.js';
 import { loadNotice, statusBadge } from './loads.js';
 
@@ -134,8 +134,18 @@ export async function render(root) {
   }
 
   const setF = (k, v) => { f[k] = v || undefined; sessionStorage.setItem('lessons:filter', JSON.stringify(f)); draw(); };
-  const sel = (k, label, opts) => h('label', { class: 'inline' }, `${label}:`, h('select', { onchange: e => setF(k, e.target.value) },
-    h('option', { value: '' }, t('الكل')), opts.map(o => h('option', { value: o.value, selected: o.value === f[k] }, o.label))));
+  // each filter choice shows how many lessons it holds
+  const keyOf = {
+    stage: l => [...new Set(l.targets.map(x => ctx.grade[ctx.section[x.section_id]?.grade_id]?.stage_id))],
+    section: l => [...new Set(l.targets.map(x => x.section_id))],
+    teacher: l => l.teachers.map(x => x.teacher_id),
+    subject: l => l.subject_id,
+  };
+  const sel = (k, label, opts) => {
+    const n = countBy(ctx.lessons, keyOf[k]);
+    return h('label', { class: 'inline' }, `${label}:`, h('select', { 'aria-label': label, onchange: e => setF(k, e.target.value) },
+      allOption(ctx.lessons.length), opts.map(o => h('option', { value: o.value, selected: o.value === f[k] }, withCount(o.label, n[o.value] || 0)))));
+  };
 
   put(root, h('h1', { class: 'title' }, `${t('الدروس والتوزيع')} — ${ctx.tt.name}`),
     ctx.readOnly ? h('p', { class: 'reasons' }, t('هذا الجدول مؤرشف وللقراءة فقط')) : null,

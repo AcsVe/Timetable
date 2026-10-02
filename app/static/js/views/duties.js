@@ -3,7 +3,7 @@
 import * as api from '../api.js';
 import { lang, t } from '../i18n.js';
 import { byId, canEdit, currentTimetable, isAdmin, list } from '../store.js';
-import { bulkTable, confirmBox, h, nameOf, openForm, put, searchBox, swap, toast, toastError, matchesQuery } from '../ui.js';
+import { bulkTable, confirmBox, h, nameOf, openForm, put, searchBox, swap, toast, toastError, matchesQuery, countBy, withCount } from '../ui.js';
 import { notifyDialog } from './notify.js';
 import { collectExtra, editModule, extraFields, extraLabel, extraText, extraValues, label, loadModule, placeSubFields, title } from './modconf.js';
 
@@ -30,6 +30,10 @@ export async function render(root) {
 
   async function load() {
     duties = termId ? (await api.get(`/api/duty-assignments?term_id=${termId}`)).items : [];
+    api.get('/api/duty-assignments').then(r => {   // how many records each term holds
+      const n = countBy(r.items, x => x.term_id);
+      for (const o of termSel.options) o.textContent = withCount(o.dataset.label, n[o.value] || 0);
+    }).catch(() => {});
     draw();
     checkIssues();
   }
@@ -66,14 +70,17 @@ export async function render(root) {
           'aria-label': t('إضافة مناوبة في هذه الخانة'),
           onclick: () => add({ ...g.sample, id: undefined, version: undefined, teacher_ids: [], weekday_ids: [dayId], notes: null }) }, '+') : null);
     };
-    return h('div', { class: 'grid-scroll' }, h('table', { class: 'data duty-grid' },
+    const total = shown.reduce((a, d) => a + (d.weekday_id ? 1 : days.length) * Math.max(1, (d.teacher_ids || []).length), 0);
+    return h('div', {}, h('div', { class: 'count-line muted small' },
+      `${t('العدد الإجمالي')}: ${shown.length}${query ? ` ${t('من')} ${duties.length}` : ''} — ${t('مناوبات المعلمين في الأسبوع')}: ${total}`),
+      h('div', { class: 'grid-scroll' }, h('table', { class: 'data duty-grid' },
       h('thead', {}, h('tr', {}, h('th', {}, `${label(mod, 'time_label')} / ${label(mod, 'duty_type')} / ${label(mod, 'location')}`),
         days.map(d => h('th', {}, nameOf(d))))),
       h('tbody', {}, [...groups.values()].map(g => h('tr', {},
         h('th', { class: 'duty-head' }, h('b', {}, g.sample.duty_type), when(g.sample) ? h('div', { dir: 'auto' }, when(g.sample)) : null,
           g.sample.location ? h('div', { class: 'muted' }, g.sample.location) : null,
           g.sample.stage_id ? h('div', { class: 'muted' }, nameOf(stage[g.sample.stage_id])) : null),
-        days.map(d => cell(g, d.id)))))));
+        days.map(d => cell(g, d.id))))))));
   }
 
   function draw() {
@@ -161,7 +168,7 @@ export async function render(root) {
     window.open(`/api/timetables/${tt.id}/reports/${kind}?format=${fmt}&lang=${lang}&style=${style}`, '_blank');
   };
   const termSel = h('select', { id: 'duty-term', 'aria-label': t('الفصل الدراسي'), onchange: e => { termId = e.target.value; sessionStorage.setItem('duties:term', termId); load(); } },
-    terms.map(x => h('option', { value: x.id, selected: x.id === termId }, nameOf(x))));
+    terms.map(x => h('option', { value: x.id, selected: x.id === termId, dataset: { label: nameOf(x) } }, nameOf(x))));
   const viewSel = h('select', { id: 'duty-view', 'aria-label': t('طريقة العرض'), onchange: e => { view = e.target.value; sessionStorage.setItem('duties:view', view); draw(); } },
     [['grid', t('حسب الأيام')], ['list', t('قائمة مع تحديد متعدد')]].map(([v, l]) => h('option', { value: v, selected: v === view }, l)));
 

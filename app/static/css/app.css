@@ -350,3 +350,8 @@ select.decision { min-width: 200px; max-width: 320px; }
 .notif-count { position: absolute; top: -4px; inset-inline-end: -4px; background: var(--err); color: #fff; border-radius: 99px;
   font-size: .7rem; min-width: 18px; padding: 0 4px; line-height: 18px; text-align: center; }
 @media (max-width: 860px) { select.decision { min-width: 0; width: 100%; } }
+
+/* totals */
+.count-line { margin: 4px 2px 6px; font-weight: 600; }
+.multi-tools .count { margin-inline-start: auto; }
+.push-box { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }

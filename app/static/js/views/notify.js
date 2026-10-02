@@ -38,7 +38,7 @@ export async function notifyDialog({ title, messages, send, canSend = true }) {
       return h('div', { class: 'msg-card' },
         h('div', { class: 'toolbar' },
           canSend ? h('input', { type: 'checkbox', checked: chosen.has(m.teacher_id), 'aria-label': `${t('تحديد')} — ${m.name}`,
-            onchange: e => { e.target.checked ? chosen.add(m.teacher_id) : chosen.delete(m.teacher_id); } }) : null,
+            onchange: e => { e.target.checked ? chosen.add(m.teacher_id) : chosen.delete(m.teacher_id); recount(); } }) : null,
           h('b', {}, m.name),
           h('button', { type: 'button', class: 'btn small ghost', onclick: () => copy(m.text) }, t('نسخ')),
           wa(m.phone) ? h('a', { class: 'btn small ghost', target: '_blank', rel: 'noopener', href: `https://wa.me/${wa(m.phone)}?text=${encodeURIComponent(m.text)}` }, t('واتساب')) : null,
@@ -50,13 +50,15 @@ export async function notifyDialog({ title, messages, send, canSend = true }) {
   }
   drawList();
   const summary = h('p', { class: 'muted' });
+  const chosenCount = h('span', { class: 'muted small count' });
+  const recount = () => { chosenCount.textContent = `${t('المحدد')}: ${chosen.size} ${t('من')} ${messages.length}`; };
   const sendBtn = h('button', { class: 'btn', type: 'button', id: 'notify-send', onclick: async () => {
     if (!chosen.size) { toast(t('اختر معلماً واحداً على الأقل'), 'err'); return; }
     sendBtn.disabled = true;
     try {
       const r = await send({ email: byEmail.checked, in_app: inApp.checked, teacher_ids: [...chosen] });
       for (const x of r.results) results.set(x.teacher_id, x);
-      summary.textContent = `${t('أُرسل بالبريد')}: ${r.sent} — ${t('فشل الإرسال')}: ${r.failed} — ${t('لا يوجد بريد')}: ${r.no_email} — ${t('إشعار داخل النظام')}: ${r.in_app}`;
+      summary.textContent = `${t('أُرسل بالبريد')}: ${r.sent} — ${t('فشل الإرسال')}: ${r.failed} — ${t('لا يوجد بريد')}: ${r.no_email} — ${t('إشعار داخل النظام')}: ${r.in_app} — ${t('تنبيه على الجوال')}: ${r.push || 0}`;
       summary.className = r.failed ? 'reasons' : 'muted';
       toast(t('تم الإبلاغ'), r.failed ? 'err' : 'ok');
       drawList();
@@ -67,11 +69,15 @@ export async function notifyDialog({ title, messages, send, canSend = true }) {
     canSend && messages.length ? h('div', { class: 'toolbar' },
       h('label', { class: 'inline' }, byEmail, t('بالبريد الإلكتروني (Microsoft 365)')),
       h('label', { class: 'inline' }, inApp, t('إشعار داخل النظام لمن له حساب')),
+      chosenCount,
+      h('button', { type: 'button', class: 'btn small ghost', onclick: () => { messages.forEach(m => chosen.add(m.teacher_id)); drawList(); recount(); } }, t('تحديد الكل')),
+      h('button', { type: 'button', class: 'btn small ghost', onclick: () => { chosen.clear(); drawList(); recount(); } }, t('إلغاء التحديد')),
       configured ? null : h('span', { class: 'muted small' }, t('البريد غير مُعَدّ بعد.'), ' ',
         isAdmin() ? h('a', { href: '#/mail', onclick: () => dlg.close() }, t('إعدادات البريد')) : null)) : null,
     list, summary,
     h('div', { class: 'modal-actions' }, h('button', { class: 'btn ghost', type: 'button', onclick: () => dlg.close() }, t('إغلاق')),
       canSend && messages.length ? sendBtn : null));
+  recount();
   dlg.onclose = null;
   dlg.showModal();
 }

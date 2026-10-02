@@ -7,7 +7,7 @@
 import * as api from '../api.js';
 import { t } from '../i18n.js';
 import { canEdit, invalidate } from '../store.js';
-import { h, nameOf, put, swap, toast, toastError } from '../ui.js';
+import { h, nameOf, put, swap, toast, toastError, withCount } from '../ui.js';
 import { loadContext, noTimetable } from './ctx.js';
 import { loadNotice } from './loads.js';
 
@@ -316,6 +316,7 @@ export async function render(root) {
 
   function draw() {
     let cards, table;
+    if (entitySel) fillEntities();   // keep the placed / total counts in the list current
     if (isWhole()) {
       const rows = wholeRows();
       cards = ctx.cards.filter(c => rows.some(r => belongs(c, r.id)));
@@ -351,12 +352,12 @@ export async function render(root) {
       .map(([v, l]) => h('option', { value: v, selected: v === colorBy }, l)));
   const paletteBtn = h('button', { class: 'btn ghost', type: 'button', id: 'grid-palette', 'aria-pressed': 'false',
     onclick: () => { showPalette = !showPalette; paletteBtn.setAttribute('aria-pressed', String(showPalette)); draw(); } }, t('تعديل الألوان'));
-  const entitySel = h('select', { id: 'grid-entity', 'aria-label': t('اختر من القائمة'), onchange: e => { entityId = e.target.value; persist(); draw(); } });
-  const stageSel = h('select', { id: 'grid-stage', 'aria-label': t('المرحلة'), onchange: e => { stageId = e.target.value; persist(); draw(); } },
-    h('option', { value: '' }, t('جميع المراحل')), ctx.stages.map(s => h('option', { value: s.id, selected: s.id === stageId }, nameOf(s))));
+  var entitySel = h('select', { id: 'grid-entity', 'aria-label': t('اختر من القائمة'), onchange: e => { entityId = e.target.value; persist(); draw(); } });
+  const stageSel = h('select', { id: 'grid-stage', 'aria-label': t('المرحلة'), onchange: e => { stageId = e.target.value; persist(); draw(); } });
   const orientSel = h('select', { id: 'grid-orient', 'aria-label': t('اتجاه الجدول'), onchange: e => { orient = e.target.value; persist(); draw(); } },
     [['rows', t('الأيام صفوفاً')], ['cols', t('الأيام أعمدةً')]].map(([v, l]) => h('option', { value: v, selected: v === orient }, l)));
   function syncControls() {
+    fillStages();
     entitySel.hidden = isWhole();
     orientSel.hidden = isWhole();
     stageSel.hidden = !isWhole();
@@ -365,7 +366,21 @@ export async function render(root) {
     if (isWhole()) return;
     const opts = entities();
     if (!opts.some(o => o.value === entityId)) entityId = opts[0]?.value || '';
-    entitySel.replaceChildren(...opts.map(o => h('option', { value: o.value, selected: o.value === entityId }, o.label)));
+    // each choice shows its placed / total periods
+    const tally = id => {
+      let placed = 0, total = 0;
+      for (const c of ctx.cards) if (belongs(c, id)) { total += c.duration; if (c.weekday_id) placed += c.duration; }
+      return `${placed} / ${total}`;
+    };
+    entitySel.replaceChildren(...opts.map(o => h('option', { value: o.value, selected: o.value === entityId, dataset: { label: o.label } },
+      withCount(o.label, tally(o.value)))));
+  }
+  function fillStages() {
+    const rowsIn = st => (mode === 'whole-teachers'
+      ? ctx.teachers.filter(x => !st || (x.stage_ids || []).includes(st)).length
+      : ctx.sortedSections().filter(x => !st || stageOfSection(x.id) === st).length);
+    stageSel.replaceChildren(h('option', { value: '' }, withCount(t('جميع المراحل'), rowsIn(''))),
+      ...ctx.stages.map(st => h('option', { value: st.id, selected: st.id === stageId }, withCount(nameOf(st), rowsIn(st.id)))));
   }
   const modeSel = h('select', { id: 'grid-mode', 'aria-label': t('طريقة العرض'), onchange: e => { mode = e.target.value; entityId = ''; fillEntities(); syncControls(); persist(); draw(); } },
     [['section', t('حسب الشعبة')], ['teacher', t('حسب المعلم')], ['room', t('حسب القاعة')],

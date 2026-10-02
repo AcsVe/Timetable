@@ -3,7 +3,7 @@
 import * as api from '../api.js';
 import { lang, t } from '../i18n.js';
 import { byId, canEdit, currentTimetable, isAdmin, list } from '../store.js';
-import { bulkTable, confirmBox, h, multiPicker, nameOf, openForm, put, searchBox, swap, toast, toastError } from '../ui.js';
+import { bulkTable, confirmBox, h, multiPicker, nameOf, openForm, put, searchBox, swap, toast, toastError, countBy, withCount } from '../ui.js';
 import { notifyDialog } from './notify.js';
 import { collectExtra, editModule, extraFields, extraLabel, extraText, extraValues, label, loadModule, placeSubFields, title } from './modconf.js';
 
@@ -38,6 +38,10 @@ export async function render(root) {
 
   async function load() {
     sessions = termId ? (await api.get(`/api/exam-sessions?term_id=${termId}`)).items : [];
+    api.get('/api/exam-sessions').then(r => {   // how many records each term holds
+      const n = countBy(r.items, x => x.term_id);
+      for (const o of termSel.options) o.textContent = withCount(o.dataset.label, n[o.value] || 0);
+    }).catch(() => {});
     draw();
     checkIssues();
   }
@@ -204,7 +208,7 @@ export async function render(root) {
     window.open(`/api/timetables/${tt.id}/reports/${kind}?format=${fmt}&lang=${lang}&style=${style}`, '_blank');
   };
   const termSel = h('select', { id: 'exam-term', 'aria-label': t('الفصل الدراسي'), onchange: e => { termId = e.target.value; sessionStorage.setItem('exams:term', termId); load(); } },
-    terms.map(x => h('option', { value: x.id, selected: x.id === termId }, nameOf(x))));
+    terms.map(x => h('option', { value: x.id, selected: x.id === termId, dataset: { label: nameOf(x) } }, nameOf(x))));
 
   put(root, h('h1', { class: 'title' }, title(mod)),
     h('p', { class: 'muted' }, t('يُبنى جدول الامتحانات لكل فصل دراسي. أضف لكل امتحان قاعاته ومواقعها والمعلمين المراقبين، ويُنبَّه إلى المراقب أو القاعة المحجوزة مرتين في الوقت نفسه.')),

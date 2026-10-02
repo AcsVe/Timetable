@@ -297,7 +297,10 @@ def _table_flowables(rep: Report, tb: DataTable, st, width, pal: Palette) -> lis
     out = [Paragraph(rich(tb.title, rtl, True), st["sub"])] if tb.title and tb.title != rep.title else []
     if tb.subtitle:
         out.append(Paragraph(rich(tb.subtitle, rtl), st["cell"]))
-    return out + [Spacer(1, 6), t]
+    out += [Spacer(1, 6), t]
+    if tb.rows and not tb.compact:
+        out += [Spacer(1, 3), Paragraph(rich(f"{'عدد الصفوف' if rtl else 'Rows'}: {len(tb.rows)}", rtl), st["foot"])]
+    return out
 
 
 def _tint(hex_color: str, amount: float = 0.25):

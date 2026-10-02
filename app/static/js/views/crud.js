@@ -2,7 +2,7 @@
 import * as api from '../api.js';
 import { t } from '../i18n.js';
 import { byId, canEdit, currentTimetable, invalidate, isAdmin, list } from '../store.js';
-import { bulkTable, confirmBox, h, nameOf, openForm, searchBox, toast, toastError, put, swap } from '../ui.js';
+import { allOption, bulkTable, confirmBox, countBy, h, nameOf, openForm, searchBox, toast, toastError, put, swap, withCount } from '../ui.js';
 
 const DOW = [[7, 'الأحد'], [1, 'الاثنين'], [2, 'الثلاثاء'], [3, 'الأربعاء'], [4, 'الخميس'], [5, 'الجمعة'], [6, 'السبت']];
 
@@ -246,6 +246,7 @@ export async function render(root, [res]) {
     });
     table.setQuery(query);
     swap(tableHost, table.el);
+    drawFilter();
   }
   async function bulkRemove(items) {
     const r = await api.post(`/api/${res}/bulk-delete`, { items: items.map(x => ({ id: x.id, version: x.version })) });
@@ -280,13 +281,20 @@ export async function render(root, [res]) {
     } catch (e) { toastError(e); }
   }
 
+  // the filter shows how many records each choice holds: «الكل (120)»، «الخامس / أ (28)»
+  const filterSel = filterField ? h('select', { 'aria-label': filterField.label,
+    onchange: e => { filterValue = e.target.value; sessionStorage.setItem(`filter:${res}`, filterValue); draw(); } }) : null;
+  async function drawFilter() {
+    if (!filterSel) return;
+    const all = await list(res).catch(() => []);
+    const n = countBy(all, x => x[cfg.filter]);
+    swap(filterSel, allOption(all.length), filterField.options.map(o => h('option', { value: o.value, selected: o.value === filterValue },
+      withCount(o.label, n[o.value] || 0))));
+  }
   const toolbar = h('div', { class: 'toolbar sticky' },
     canEdit() ? h('button', { class: 'btn', onclick: add }, `+ ${t('إضافة')}`) : null,
     searchBox(v => { query = v; if (table) table.setQuery(v); }, t('ابحث بالاسم أو بأي حقل…')),
-    filterField ? h('label', { class: 'inline' }, `${filterField.label}:`,
-      h('select', { onchange: e => { filterValue = e.target.value; sessionStorage.setItem(`filter:${res}`, filterValue); draw(); } },
-        h('option', { value: '' }, t('الكل')),
-        filterField.options.map(o => h('option', { value: o.value, selected: o.value === filterValue }, o.label)))) : null);
+    filterField ? h('label', { class: 'inline' }, `${filterField.label}:`, filterSel) : null);
   const links = (cfg.links || []).map(l => (l.report
     ? h('a', { class: 'btn ghost small', href: '#/reports', onclick: () => sessionStorage.setItem('reports', JSON.stringify({ kind: l.report })) }, t(l.label))
     : h('a', { class: 'btn ghost small', href: l.href }, t(l.label))));

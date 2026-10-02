@@ -23,6 +23,7 @@ from app.models import AppSetting, Card, Lesson
 PUBLIC_SETTINGS = {"offline_edit_enabled", "vapid_public_key", "school_week_start"}
 # Screen configuration (labels, lists, extra fields) every user needs to see the screens the same way.
 PUBLIC_PREFIXES = ("module:", "ui:")
+SECRET_PREFIXES = ("mail:", "push:")
 
 
 def _synced():
@@ -68,7 +69,7 @@ def list_settings():
     rows = db.session.scalars(q).all()
     if current_user.role != "admin":
         rows = [r for r in rows if r.key in PUBLIC_SETTINGS or r.key.startswith(PUBLIC_PREFIXES)]
-    rows = [r for r in rows if not r.key.startswith("mail:")]   # secrets: only through /api/mail/settings
+    rows = [r for r in rows if not r.key.startswith(SECRET_PREFIXES)]   # secrets never leave the server this way
     return jsonify({r.key: r.value for r in rows})
 
 
@@ -76,8 +77,8 @@ def list_settings():
 @write_endpoint
 def put_setting(key):
     require_admin(current_user)
-    if key.startswith("mail:"):
-        raise ApiError("validation", 400, details={"field": "key", "reason": "use /api/mail/settings"})
+    if key.startswith(SECRET_PREFIXES) or key == "vapid_public_key":
+        raise ApiError("validation", 400, details={"field": "key", "reason": "protected setting"})
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or "value" not in data:
         raise ApiError("validation", 400, details={"field": "value"})

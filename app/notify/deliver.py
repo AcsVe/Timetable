@@ -12,7 +12,7 @@ from sqlalchemy import select
 from app.extensions import db
 from app.models import AppUser, EmailLog, Notification, School, Teacher
 from app.models.base import utcnow
-from app.notify import graph
+from app.notify import graph, webpush
 
 
 def _school_name() -> str:
@@ -47,10 +47,21 @@ def deliver(messages: list[dict], *, kind: str, title: str, title_en: str, url: 
         address = (t.email if t and t.email else None) or (user.email if user else None)
         r = {"teacher_id": str(m["teacher_id"]), "name": m["name"], "email": address, "email_status": None,
              "error": None, "in_app": False}
+        r["push"] = 0
         if in_app and user is not None:
-            db.session.add(Notification(user_id=user.id, kind=kind, title_ar=title, title_en=title_en,
-                                        body={"text": m["text"]}, url=url))
+            note = Notification(user_id=user.id, kind=kind, title_ar=title, title_en=title_en, body={"text": m["text"]}, url=url)
+            db.session.add(note)
             r["in_app"] = True
+            # a phone / computer alert on every device the teacher enabled
+            lines = [x for x in m["text"].split("\n")[1:] if x.strip()]
+            try:
+                pushed = webpush.push_to_user(user.id, title, "\n".join(lines[:4]), f"/{url}" if url else "/")
+            except Exception as e:   # push is a bonus: never block the e-mail and in-app notice
+                pushed = {"sent": 0, "failed": 1}
+                r["push_error"] = str(e)[:200]
+            r["push"] = pushed["sent"]
+            if pushed["sent"]:
+                note.push_sent_at = utcnow()
         if email:
             if not can_mail:
                 r["email_status"] = "disabled"
@@ -74,4 +85,5 @@ def deliver(messages: list[dict], *, kind: str, title: str, title_en: str, url: 
     count = lambda st: sum(1 for r in results if r["email_status"] == st)  # noqa: E731
     return {"results": results, "teachers": len(results), "sent": count("sent"), "failed": count("failed"),
             "no_email": count("no_email"), "in_app": sum(1 for r in results if r["in_app"]),
+            "push": sum(r.get("push", 0) for r in results),
             "mail_configured": graph.is_configured(settings), "at": utcnow().isoformat()}

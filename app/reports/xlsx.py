@@ -203,11 +203,13 @@ def _write_table(ws, rep: Report, t: Table, logo, start_row: int | None = None):
             continue
         longest = max([len(str(col))] + [max((len(x) for x in str(r[j - 1] or "").split("\n")), default=0) for r in rows])
         ws.column_dimensions[get_column_letter(j)].width = min(max(10, longest + 2), 60)
+    if t.rows and not t.compact:
+        ws.cell(row=r0 + len(rows) + 1, column=1, value=f"{'عدد الصفوف' if rep.rtl else 'Rows'}: {len(t.rows)}").font = Font(name="Arial", italic=True, size=9)
     if start_row is None:
         ws.freeze_panes = ws.cell(row=r0 + 1, column=2)
         if t.rows and not t.group_header:
             ws.auto_filter.ref = f"A{r0}:{get_column_letter(len(t.columns))}{r0 + len(t.rows)}"
-    return r0 + len(rows) + 1
+    return r0 + len(rows) + 2
 
 
 def render_xlsx(rep: Report, logo: bytes | None) -> bytes:
