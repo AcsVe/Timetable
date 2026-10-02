@@ -12,6 +12,7 @@ const ROUTES = {
   loads: () => import('./views/loads.js'),
   meetings: () => import('./views/meetings.js'),
   curriculum: () => import('./views/curriculum.js'),
+  plans: () => import('./views/plans.js'),
   cover: () => import('./views/cover.js'),
   generate: () => import('./views/generate.js'),
   mail: () => import('./views/mail.js'),
@@ -71,7 +72,7 @@ async function route() {
   currentPath = path;
 
   const [name, ...rest] = path.split('/');
-  document.querySelectorAll('#sidebar a').forEach(a => a.classList.toggle('active', a.dataset.route === path));
+  document.querySelectorAll('#sidebar a').forEach(a => a.classList.toggle('active', a.dataset.route === path || path.startsWith(`${a.dataset.route}/`)));
   document.getElementById('sidebar').classList.remove('open');
   const loader = ROUTES[name];
   const token = ++renderToken;

@@ -23,6 +23,7 @@ from app.models import (
     StudentGroup,
     Subject,
     Teacher,
+    Term,
     Timetable,
     Weekday,
 )
@@ -34,7 +35,7 @@ KINDS = (
     "teacher-sections", "teacher-subjects", "teacher-daily",
     "stats-teachers", "stats-subjects", "stats-sections", "load-status",
     "exam-schedule", "invigilation", "duty-roster", "duty-teachers",
-    "cover-daily", "cover-stats", "absence-log", "student-lists", "meetings",
+    "cover-daily", "cover-stats", "absence-log", "student-lists", "meetings", "plan-sections", "plan-teachers",
 )
 # Tables that are a plain matrix (row label × column label) and can be turned on their side.
 MATRIX_KINDS = {"teacher-sections", "teacher-daily", "duty-roster"}
@@ -65,6 +66,8 @@ TITLES = {
     "absence-log": ("سجل غياب المعلمين", "Teacher absence log"),
     "student-lists": ("قوائم الطلبة حسب الشعب", "Class lists"),
     "meetings": ("جدول الاجتماعات", "Meetings timetable"),
+    "plan-sections": ("تنفيذ الخطة: الشعب والمباحث", "Plan delivery: sections and subjects"),
+    "plan-teachers": ("تنفيذ الخطة: المعلمون والنصاب", "Plan delivery: teachers and load"),
 }
 DATE_KEYS = ("date", "date_from", "date_to")
 
@@ -1228,6 +1231,68 @@ def meetings_table(ctx: Ctx) -> Table:
                  rows=rows, numeric={6})
 
 
+PLAN_STATUS = {"ok": ("مكتمل", "Complete"), "under": ("نقص", "Under"), "over": ("زيادة", "Over"),
+               "extra": ("ليس في الخطة", "Not in plan"), "none": ("—", "—")}
+
+
+def _plan_analysis(ctx: Ctx):
+    from app.models import PeriodPlan
+    from app.rules.plans import Calendar, analyze, periods
+    pid = ctx.f.get("plan_id")
+    plan = db.session.get(PeriodPlan, pid) if pid else None
+    if plan is None:
+        from app.errors import ApiError
+        raise ApiError("validation", 400, details={"field": "plan_id", "reason": "required"})
+    rep = analyze(plan, ctx.tt, ctx.f.get("period"))
+    label = ""
+    if ctx.f.get("period"):
+        cal = Calendar(db.session.get(Term, plan.term_id))
+        label = next((p["label"] for p in periods(plan, cal, ctx.lang) if p["key"] == ctx.f["period"]), "")
+    title = f"{plan.name}" + (f" — {label}" if label else "") + (ctx.L(" (معتمدة)", " (approved)") if plan.status == "approved" else ctx.L(" (مسودة)", " (draft)"))
+    return plan, rep, title
+
+
+def plan_sections(ctx: Ctx) -> Table:
+    plan, rep, title = _plan_analysis(ctx)
+    rows, colors = [], {}
+    for r in rep["rows"]:
+        if ctx.f.get("section_id") and r["section_id"] != str(ctx.f["section_id"]):
+            continue
+        if ctx.f.get("subject_id") and r["subject_id"] != str(ctx.f["subject_id"]):
+            continue
+        st = PLAN_STATUS[r["status"]][1 if ctx.lang == "en" else 0]
+        rows.append([r["section"], r["subject_en"] if ctx.lang == "en" else r["subject"], r["required"], r["scheduled"],
+                     r["diff"], r["due"], r["lost"], r["covered"], r["delivered"], st])
+    return Table(title=title, subtitle=ctx.L(f"أيام الدراسة: {rep['school_days']} — حتى تاريخ {rep['today']}",
+                                             f"School days: {rep['school_days']} — up to {rep['today']}"),
+                 columns=[ctx.L("الشعبة", "Section"), ctx.L("المبحث", "Subject"), ctx.L("المطلوب في الخطة", "Required"),
+                          ctx.L("المتاح في الجدول", "Scheduled"), ctx.L("الفرق", "Difference"),
+                          ctx.L("المستحق حتى اليوم", "Due to date"), ctx.L("ضائع بالغياب", "Lost (absence)"),
+                          ctx.L("منها بإشغال", "Of which covered"), ctx.L("المنفَّذ", "Delivered"), ctx.L("الحالة", "Status")],
+                 rows=rows, numeric={2, 3, 4, 5, 6, 7, 8}, cell_colors=colors,
+                 totals=[ctx.L("المجموع", "Total"), ""] + [sum(r[i] for r in rows) for i in range(2, 9)] + [""])
+
+
+def plan_teachers(ctx: Ctx) -> Table:
+    plan, rep, title = _plan_analysis(ctx)
+    rows = []
+    for r in rep["teachers"]:
+        if ctx.f.get("teacher_id") and r["teacher_id"] != str(ctx.f["teacher_id"]):
+            continue
+        rows.append([r["name_en"] if ctx.lang == "en" else r["name"], r["required"], r["scheduled"], r["quota"],
+                     (r["scheduled"] - r["quota"]) if r["quota"] is not None else None, r["due"], r["lost"], r["covered"],
+                     r["delivered"], PLAN_STATUS[r["status"]][1 if ctx.lang == "en" else 0]])
+    return Table(title=title, subtitle=ctx.L(f"النصاب = النصاب الأسبوعي × {rep['weeks']} أسبوع دراسي (بعد العطل)",
+                                             f"Load = weekly load × {rep['weeks']} school weeks (after holidays)"),
+                 columns=[ctx.L("المعلم", "Teacher"), ctx.L("مطلوب الخطة لدروسه", "Plan for their lessons"),
+                          ctx.L("المتاح في الجدول", "Scheduled"), ctx.L("النصاب للفترة", "Load for the period"),
+                          ctx.L("الفرق عن النصاب", "Difference"), ctx.L("المستحق حتى اليوم", "Due to date"),
+                          ctx.L("ضائع بالغياب", "Lost (absence)"), ctx.L("منها بإشغال", "Of which covered"),
+                          ctx.L("المنفَّذ", "Delivered"), ctx.L("حالة النصاب", "Load status")],
+                 rows=rows, numeric={1, 2, 3, 4, 5, 6, 7, 8},
+                 totals=[ctx.L("المجموع", "Total")] + [sum((r[i] or 0) for r in rows) for i in range(1, 9)] + [""])
+
+
 def build_report(tt: Timetable, kind: str, lang: str, filters: dict, layout: str = "rows", style: str = "plain",
                  show: set | None = None, signature: list | None = None) -> Report:
     ctx = Ctx(tt, lang, filters, show)
@@ -1286,6 +1351,10 @@ def build_report(tt: Timetable, kind: str, lang: str, filters: dict, layout: str
         rep.tables = student_lists(ctx)
     elif kind == "meetings":
         rep.tables = [meetings_table(ctx)]
+    elif kind == "plan-sections":
+        rep.tables = [plan_sections(ctx)]
+    elif kind == "plan-teachers":
+        rep.tables = [plan_teachers(ctx)]
     if kind in MATRIX_KINDS and rep.layout == "cols":
         rep.tables = [transpose(t, ctx.L("المجموع", "Total")) for t in rep.tables]
     if "footer" not in ctx.show:
@@ -1311,4 +1380,8 @@ def parse_filters(args) -> dict:
         v = args.get(k)
         if v:
             out[k] = _date.fromisoformat(v)
+    if args.get("plan_id"):
+        out["plan_id"] = uuid.UUID(args["plan_id"])
+    if args.get("period"):
+        out["period"] = str(args["period"])[:10]
     return out

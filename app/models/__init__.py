@@ -44,3 +44,4 @@ from app.models.cover import COVER_KINDS, Substitution, TeacherAbsence  # noqa: 
 from app.models.people import EmailLog, Student  # noqa: F401
 from app.models.generator import GeneratorRun  # noqa: F401
 from app.models.curriculum import CurriculumItem  # noqa: F401
+from app.models.plans import HOLIDAY_KINDS, PERIOD_TYPES, Holiday, PeriodPlan  # noqa: F401

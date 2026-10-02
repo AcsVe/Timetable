@@ -214,3 +214,38 @@ def test_study_plan_matrix_check_and_create_missing_lessons(page):
     page.goto(f"{page.base}/#/validate")
     expect(page.locator("body")).to_be_visible()
     assert not page.errors
+
+
+def test_holiday_and_plan_builder(page):
+    page.goto(f"{page.base}/#/setup/terms")
+    page.locator("table.data tbody tr").first.locator("button", has_text="تعديل").click()
+    page.fill("#f-start_date", "2026-09-06")
+    page.fill("#f-end_date", "2027-01-14")
+    page.click("#modal-form button[type=submit]")
+    expect(page.locator("table.data tbody tr").first).to_contain_text("2026-09-06")
+    page.goto(f"{page.base}/#/setup/holidays")
+    page.click("text=+ إضافة")
+    page.fill("#f-name_ar", "عطلة رسمية")
+    page.fill("#f-date_from", "2026-09-17")
+    page.fill("#f-date_to", "2026-09-17")
+    page.click("#modal-form button[type=submit]")
+    expect(page.locator("table.data")).to_contain_text("عطلة رسمية")
+    page.goto(f"{page.base}/#/plans")
+    page.click("#plan-new")
+    page.fill("#f-name", "خطة شهرية")
+    page.select_option("#f-period_type", "month")
+    page.click("#modal-form button[type=submit]")
+    expect(page.locator(".plan-matrix, p.muted").first).to_be_visible()
+    page.check("text=كل المباحث")
+    cell = page.locator(".plan-matrix tbody input").first
+    cell.fill("12")
+    cell.press("Tab")
+    page.click("#plan-save")
+    expect(page.locator("#toast")).to_contain_text("تم الحفظ")
+    page.click("#plan-approve")
+    expect(page.locator("h1 .chip")).to_contain_text("معتمدة")
+    page.click("#plan-tab-analysis")
+    expect(page.locator(".stats")).to_contain_text("نقص")
+    page.select_option("#plan-view", "teachers")
+    expect(page.locator("table.data")).to_contain_text("النصاب للفترة")
+    assert not page.errors

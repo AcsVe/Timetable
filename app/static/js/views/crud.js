@@ -109,6 +109,17 @@ const CONFIG = {
     { name: 'name_ar', label: 'الاسم (عربي)', required: true }, { name: 'name_en', label: 'الاسم (إنجليزي)' },
     { name: 'ordinal', label: 'الترتيب', type: 'number', required: true, min: 1 },
     { name: 'start_date', label: 'تاريخ البداية', type: 'date' }, { name: 'end_date', label: 'تاريخ النهاية', type: 'date' }] },
+  holidays: { title: 'العطل الرسمية وأيام التعطيل', fields: [
+    { name: 'name_ar', label: 'اسم العطلة', required: true, placeholder: 'مثال: عيد الاستقلال' }, { name: 'name_en', label: 'الاسم (إنجليزي)' },
+    { name: 'date_from', label: 'من تاريخ', type: 'date', required: true }, { name: 'date_to', label: 'إلى تاريخ', type: 'date', required: true },
+    { name: 'kind', label: 'النوع', type: 'select', required: true, options: [
+      { value: 'official', label: 'عطلة رسمية' }, { value: 'term_break', label: 'عطلة فصلية' }, { value: 'exams', label: 'امتحانات' },
+      { value: 'activity', label: 'يوم نشاط' }, { value: 'other', label: 'أخرى' }] },
+    { name: 'stage_ids', label: 'المراحل (اتركها فارغة لجميع المراحل)', type: 'multi', ref: 'stages' },
+    { name: 'stops_lessons', label: 'تتوقف فيه الحصص', type: 'bool' },
+    { name: 'notes', label: 'ملاحظات', type: 'textarea' }],
+    defaults: { kind: 'official', stops_lessons: true },
+    columns: ['name_ar', 'date_from', 'date_to', 'kind', 'stage_ids', 'stops_lessons'] },
   weekdays: { title: 'أيام الأسبوع', fields: [
     { name: 'iso_dow', label: 'اليوم', type: 'select', required: true, options: DOW.map(([v, l]) => ({ value: v, label: l })) },
     { name: 'name_ar', label: 'الاسم (عربي)', required: true }, { name: 'name_en', label: 'الاسم (إنجليزي)' },

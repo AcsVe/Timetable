@@ -174,7 +174,7 @@ def test_every_report_in_every_format(ops):
     a.ok("post", "/api/exam-sessions", {"term_id": s["term"], "exam_date": "2027-01-10", "subject_id": s["math"],
                                         "rooms": [{"room_id": s["room"], "teacher_ids": [s["t2"]]}]})
     a.ok("post", "/api/duty-assignments", {"term_id": s["term"], "duty_type": "الأنشطة", "teacher_ids": [s["t1"]]})
-    for kind in KINDS:
+    for kind in [k for k in KINDS if not k.startswith("plan-")]:    # plan reports need a plan (tests/test_plans.py)
         for layout in ("rows", "cols"):
             for style in ("plain", "color"):
                 q = dict(layout=layout, style=style, signature="مدير المدرسة|الختم")

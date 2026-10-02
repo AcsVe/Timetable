@@ -37,8 +37,10 @@ from app.models import (
     DutyAssignment,
     ExamSession,
     Grade,
+    Holiday,
     Lesson,
     Occupancy,
+    PeriodPlan,
     Room,
     School,
     Section,
@@ -212,6 +214,57 @@ def _timetable_before_delete(tt: Timetable):
     for other in db.session.scalars(select(Timetable).where(Timetable.based_on_id == tt.id)):
         other.based_on_id = None
     db.session.flush()
+
+
+def _holiday_write(obj, data: dict, creating: bool):
+    if not (obj.name_ar or "").strip():
+        raise ApiError("validation", 400, details={"field": "name_ar", "reason": "required"})
+    if obj.date_from and obj.date_to and obj.date_to < obj.date_from:
+        raise ApiError("validation", 400, details={"field": "date_to", "reason": "before date_from",
+                                                    "message": "تاريخ النهاية قبل تاريخ البداية"})
+    if "stage_ids" in data:
+        obj.stage_ids = [uuid.UUID(i) for i in _ids_exist(Stage, data["stage_ids"], "stage_ids")]
+
+
+def _plan_write(obj, data: dict, creating: bool):
+    from datetime import date as _date
+    if not (obj.name or "").strip():
+        raise ApiError("validation", 400, details={"field": "name", "reason": "required"})
+    if "targets" in data:
+        raw = data["targets"]
+        if not isinstance(raw, dict) or len(raw) > 5000:
+            raise ApiError("validation", 400, details={"field": "targets"})
+        clean = {}
+        for k, row in raw.items():
+            try:
+                g, sub = (uuid.UUID(x) for x in str(k).split(":"))
+            except ValueError:
+                raise ApiError("validation", 400, details={"field": "targets", "reason": f"bad key {k}"})
+            if not isinstance(row, dict):
+                raise ApiError("validation", 400, details={"field": f"targets.{k}"})
+            vals = {}
+            for pk, v in row.items():
+                pk = str(pk)
+                ok = pk == "term"
+                for fmt in ("%Y-%m", "%Y-%m-%d"):
+                    try:
+                        from datetime import datetime as _dt
+                        _dt.strptime(pk, fmt)
+                        ok = True
+                    except ValueError:
+                        pass
+                if not ok:
+                    raise ApiError("validation", 400, details={"field": f"targets.{k}", "reason": f"bad period {pk}"})
+                if v in (None, "", 0):
+                    continue
+                if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 5000:
+                    raise ApiError("validation", 400, details={"field": f"targets.{k}.{pk}"})
+                vals[pk] = int(v)
+            if vals:
+                clean[f"{g}:{sub}"] = vals
+        obj.targets = clean
+    if not creating and obj.status == "approved":
+        obj.status, obj.approved_by, obj.approved_at = "draft", None, None   # a change needs a new approval
 
 
 def _timetable_child_guard(obj):
@@ -432,6 +485,10 @@ RESOURCES: dict[str, Resource] = {
                              create_only_fields=frozenset({"timetable_id"})),
     "exam-sessions": Resource(ExamSession, write_extra=_exam_write),
     "duty-assignments": Resource(DutyAssignment, write_extra=_duty_write),
+    "holidays": Resource(Holiday, write_extra=_holiday_write),
+    "plans": Resource(PeriodPlan, write_extra=_plan_write,
+                      read_only_fields=frozenset({"status", "approved_by", "approved_at"}),
+                      create_only_fields=frozenset({"term_id", "period_type"})),
     "students": Resource(Student, write_extra=_student_write, after_write=_student_after),
     "absences": Resource(TeacherAbsence, write_extra=_absence_write, before_delete=_absence_before_delete),
     "substitutions": Resource(Substitution, write_extra=_substitution_write,
