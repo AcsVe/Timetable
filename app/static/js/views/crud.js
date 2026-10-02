@@ -77,6 +77,7 @@ const CONFIG = {
     { name: 'color', label: 'اللون', type: 'color' },
     { name: 'stage_ids', label: 'المراحل التي يدرّس فيها', type: 'multi', ref: 'stages' },
     { name: 'subject_ids', label: 'المباحث المؤهّل لها', type: 'multi', ref: 'subjects' },
+    { name: 'is_head', label: 'رئيس قسم', type: 'bool' },
     { name: 'target_weekly_periods', label: 'النصاب الأسبوعي', type: 'number', min: 0 },
     { name: 'max_periods_per_day', label: 'أقصى عدد من الحصص يومياً', type: 'number', min: 0 },
     { name: 'max_gaps_per_day', label: 'أقصى عدد من الفجوات يومياً', type: 'number', min: 0 },
@@ -84,7 +85,7 @@ const CONFIG = {
     { name: 'max_consecutive', label: 'أقصى عدد من الحصص المتتالية', type: 'number', min: 0 },
     { name: 'max_days_per_week', label: 'أقصى عدد من أيام الدوام', type: 'number', min: 0 },
     { name: 'user_id', label: 'حساب المستخدم المرتبط', type: 'select', ref: 'users', adminOnly: true }],
-    columns: ['name_ar', 'short', 'stage_ids', 'subject_ids', 'target_weekly_periods'],
+    columns: ['name_ar', 'short', 'stage_ids', 'subject_ids', 'is_head', 'target_weekly_periods'],
     extraColumns: teacherCounts,
     actions: [
       { label: 'الجدول', go: x => goTo('#/grid', 'grid:view', { mode: 'teacher', entityId: x.id }) },

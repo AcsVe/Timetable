@@ -152,6 +152,8 @@ class CoverDay:
         out: dict[str, Need] = {}
         for c in self.cards:
             l = self.lessons[c.lesson_id]
+            if l.is_meeting:          # no class waits for a meeting: nothing to cover
+                continue
             for p in range(c.period_no, c.period_no + c.duration):
                 for tid in l.teacher_ids:
                     a = self.absence_of(tid, p)
@@ -203,6 +205,8 @@ class CoverDay:
         subj_of = defaultdict(set)
         secs_of = defaultdict(set)
         for l in self.lessons.values():
+            if l.is_meeting:
+                continue
             for tid in l.teacher_ids:
                 assigned[tid] += l.periods_per_week
                 subj_of[tid].add(l.subject_id)
@@ -230,7 +234,9 @@ class CoverDay:
             hard = []
             if p in self.teaching.get(tid, {}):
                 c = self.teaching[tid][p]
-                hard.append(f"لديه حصة {self.lessons[c.lesson_id].subject.name_ar} في الوقت نفسه")
+                busy_l = self.lessons[c.lesson_id]
+                hard.append(f"لديه {busy_l.label} في الوقت نفسه" if busy_l.is_meeting
+                            else f"لديه حصة {busy_l.subject.name_ar} في الوقت نفسه")
             if self.absence_of(tid, p):
                 hard.append("غائب")
             if (tid, p) in covering:

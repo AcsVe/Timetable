@@ -15,6 +15,7 @@ const KINDS = [
   ['stage-timetable', 'الجدول العام للمرحلة (الشعب)', ['stage_id', 'grade_id', 'section_id', 'subject_id', 'teacher_id'], 'الجداول'],
   ['teachers-master', 'الجدول العام للمعلمين', ['stage_id', 'grade_id', 'section_id', 'subject_id', 'teacher_id'], 'الجداول'],
   ['free-teachers', 'المعلمون المتاحون في كل حصة (لحصص الإشغال)', ['date', 'stage_id', 'subject_id'], 'الجداول'],
+  ['meetings', 'جدول الاجتماعات', ['teacher_id'], 'الجداول'],
   ['teacher-sections', 'توزيع المعلمين على الشعب', ALL, 'التوزيع والإحصائيات'],
   ['teacher-subjects', 'توزيع المعلمين على المباحث', ALL, 'التوزيع والإحصائيات'],
   ['teacher-daily', 'توزيع حصص المعلم على أيام الأسبوع', ALL, 'التوزيع والإحصائيات'],

@@ -10,6 +10,7 @@ export async function render(root) {
   let ctx = await loadContext();
   if (!ctx) return noTimetable(root);
   const f = JSON.parse(sessionStorage.getItem('lessons:filter') || '{}');
+  const teaching = () => ctx.lessons.filter(l => l.kind !== 'meeting');   // meetings have their own page
   const host = h('div');
   const loadHost = h('div');
 
@@ -84,7 +85,7 @@ export async function render(root) {
   function draw() {
     const editable = canEdit() && !ctx.readOnly;
     table = bulkTable({
-      items: ctx.lessons.filter(matches),
+      items: teaching().filter(matches),
       text: l => [nameOf(ctx.subject[l.subject_id]), ...l.targets.map(tg => ctx.targetLabel(tg)),
                   ...l.teachers.map(x => nameOf(ctx.teacher[x.teacher_id])), l.notes || ''].join(' '),
       columns: [
@@ -119,7 +120,7 @@ export async function render(root) {
     try { status = await api.get(`/api/timetables/${ctx.tt.id}/load-status`); } catch (_) { /* offline: plain counts */ }
     const byT = Object.fromEntries((status?.teachers || []).map(r => [r.teacher_id, r]));
     const load = {};
-    for (const l of ctx.lessons) for (const x of l.teachers) load[x.teacher_id] = (load[x.teacher_id] || 0) + l.periods_per_week;
+    for (const l of ctx.lessons) if (l.counts_load !== false) for (const x of l.teachers) load[x.teacher_id] = (load[x.teacher_id] || 0) + l.periods_per_week;
     const rows = [...ctx.teachers].filter(x => load[x.id] || x.target_weekly_periods || byT[x.id])
       .sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'ar')).map(x => {
         const r = byT[x.id];
@@ -142,9 +143,9 @@ export async function render(root) {
     subject: l => l.subject_id,
   };
   const sel = (k, label, opts) => {
-    const n = countBy(ctx.lessons, keyOf[k]);
+    const n = countBy(teaching(), keyOf[k]);
     return h('label', { class: 'inline' }, `${label}:`, h('select', { 'aria-label': label, onchange: e => setF(k, e.target.value) },
-      allOption(ctx.lessons.length), opts.map(o => h('option', { value: o.value, selected: o.value === f[k] }, withCount(o.label, n[o.value] || 0)))));
+      allOption(teaching().length), opts.map(o => h('option', { value: o.value, selected: o.value === f[k] }, withCount(o.label, n[o.value] || 0)))));
   };
 
   put(root, h('h1', { class: 'title' }, `${t('الدروس والتوزيع')} — ${ctx.tt.name}`),

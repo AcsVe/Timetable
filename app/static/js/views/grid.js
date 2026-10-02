@@ -101,11 +101,12 @@ export async function render(root) {
     const subj = ctx.subject[l.subject_id];
     const bySection = mode === 'section' || mode === 'whole-sections';
     const groups = l.targets.filter(x => x.section_id === rowId && x.group_id).map(x => nameOf(ctx.group[x.group_id]));
-    const sub = bySection
+    const sub = l.kind === 'meeting' ? (mini ? '' : `${t('الأعضاء')}: ${l.teachers.length}`) : bySection
       ? [groups.join('، '), mini ? '' : l.teachers.map(x => teacherName(x.teacher_id)).join('، ')].filter(Boolean).join(' · ')
       : l.targets.map(x => (mini ? ctx.sectionLabel(x.section_id) : ctx.targetLabel(x))).join('، ');
     const room = card.room_id ? nameOf(ctx.room[card.room_id]) : '';
-    const full = [nameOf(subj), bySection ? groups.join('، ') : '', l.targets.map(x => ctx.targetLabel(x)).join('، '),
+    const isMeeting = l.kind === 'meeting';
+    const full = [isMeeting ? l.title : nameOf(subj), bySection ? groups.join('، ') : '', l.targets.map(x => ctx.targetLabel(x)).join('، '),
                   l.teachers.map(x => nameOf(ctx.teacher[x.teacher_id])).join('، '), room].filter(Boolean);
     const bg = chipColor(l);
     const el = h('div', {
@@ -114,7 +115,7 @@ export async function render(root) {
       draggable: editable && !card.is_locked && !continuation ? 'true' : null,
       dataset: { card: card.id }, title: [...new Set(full)].join('\n'),
     },
-      h('div', { class: 'subj' }, subj?.short_ar || nameOf(subj), continuation && !mini ? ` (${t('تتمّة')})` : ''),
+      h('div', { class: 'subj' }, isMeeting ? l.title : (subj?.short_ar || nameOf(subj)), continuation && !mini ? ` (${t('تتمّة')})` : ''),
       sub ? h('div', {}, sub) : null,
       room && !mini ? h('div', { class: 'muted' }, room) : null,
       !continuation && !mini && (card.is_locked || editable) ? h('span', {

@@ -34,7 +34,7 @@ KINDS = (
     "teacher-sections", "teacher-subjects", "teacher-daily",
     "stats-teachers", "stats-subjects", "stats-sections", "load-status",
     "exam-schedule", "invigilation", "duty-roster", "duty-teachers",
-    "cover-daily", "cover-stats", "absence-log", "student-lists",
+    "cover-daily", "cover-stats", "absence-log", "student-lists", "meetings",
 )
 # Tables that are a plain matrix (row label × column label) and can be turned on their side.
 MATRIX_KINDS = {"teacher-sections", "teacher-daily", "duty-roster"}
@@ -64,6 +64,7 @@ TITLES = {
     "cover-stats": ("حصص الإشغال والغياب لكل معلم", "Cover and absence per teacher"),
     "absence-log": ("سجل غياب المعلمين", "Teacher absence log"),
     "student-lists": ("قوائم الطلبة حسب الشعب", "Class lists"),
+    "meetings": ("جدول الاجتماعات", "Meetings timetable"),
 }
 DATE_KEYS = ("date", "date_from", "date_to")
 
@@ -209,6 +210,12 @@ class Ctx:
             return obj.name_en
         return getattr(obj, "name_ar", None) or getattr(obj, "name", "")
 
+    def lesson_name(self, l: Lesson) -> str:
+        """Meeting title or subject name."""
+        if l.is_meeting and l.title:
+            return l.title
+        return self.name(self.subjects.get(l.subject_id))
+
     @property
     def sep(self) -> str:
         return "، " if self.lang == "ar" else ", "
@@ -263,8 +270,16 @@ class Ctx:
             return any(self.section_in_scope(t.section_id) for t in l.targets)
         return True
 
+    def scoped_teacher_ids(self) -> set:
+        """Teachers of the lessons in scope; members of meetings too when no class/subject filter is set."""
+        ids = {tid for l in self.scoped_lessons() for tid in l.teacher_ids}
+        if not any(self.f.get(k) for k in ("section_id", "grade_id", "stage_id", "subject_id")):
+            ids |= {tid for l in self.lessons if l.is_meeting for tid in l.teacher_ids}
+        return ids
+
     def scoped_lessons(self) -> list[Lesson]:
-        return [l for l in self.lessons if self.lesson_in_scope(l)]
+        """Teaching lessons in the filters' scope (meetings have their own report)."""
+        return [l for l in self.lessons if not l.is_meeting and self.lesson_in_scope(l)]
 
     def describe_filters(self) -> str:
         parts = []
@@ -372,15 +387,15 @@ def teacher_grids(ctx: Ctx) -> list[Grid]:
     if ctx.f.get("teacher_id"):
         ids = [ctx.f["teacher_id"]]
     else:
-        ids = {tid for l in ctx.scoped_lessons() for tid in l.teacher_ids}
+        ids = ctx.scoped_teacher_ids()
     teachers = sorted((ctx.teachers[i] for i in ids if i in ctx.teachers), key=lambda t: ctx.name(t))
     grids = []
     for t in teachers:
         cards = [c for c in ctx.cards if t.id in ctx.lesson[c.lesson_id].teacher_ids]
 
         def entry(c, l):
-            lines = [ctx.name(ctx.subjects.get(l.subject_id))]
-            if "section" in ctx.show:
+            lines = [ctx.lesson_name(l)]
+            if "section" in ctx.show and l.targets:
                 lines.append(ctx.sep.join(ctx.target_label(x) if "groups" in ctx.show else ctx.section_label(x.section_id)
                                           for x in l.targets))
             if c.room_id and "room" in ctx.show:
@@ -388,10 +403,10 @@ def teacher_grids(ctx: Ctx) -> list[Grid]:
             return lines
         title = f"{ctx.L('المعلمة' if t.gender == 'f' else 'المعلم', 'Teacher')}: {ctx.name(t)}"
         grid = _grid_for(ctx, title, cards, entry, None)
-        mine = [l for l in ctx.lessons if t.id in l.teacher_ids]
+        mine = [l for l in ctx.lessons if t.id in l.teacher_ids and l.counts_load]
         assigned = sum(l.periods_per_week for l in mine)
-        placed = sum(c.duration for c in cards if c.weekday_id)
-        subjects = sorted({ctx.name(ctx.subjects.get(l.subject_id)) for l in mine if ctx.subjects.get(l.subject_id)})
+        placed = sum(c.duration for c in cards if c.weekday_id and ctx.lesson[c.lesson_id].counts_load)
+        subjects = sorted({ctx.name(ctx.subjects.get(l.subject_id)) for l in mine if ctx.subjects.get(l.subject_id) and not l.is_meeting})
         parts = [ctx.L(f"النصاب الأسبوعي: {t.target_weekly_periods}", f"Weekly load: {t.target_weekly_periods}")
                  if t.target_weekly_periods else None,
                  ctx.L(f"الحصص المُسنَدة: {assigned}", f"Assigned periods: {assigned}"),
@@ -443,8 +458,8 @@ def room_grids(ctx: Ctx) -> list[Grid]:
         cards = [c for c in ctx.cards if c.room_id == rid]
 
         def entry(c, l):
-            lines = [ctx.name(ctx.subjects.get(l.subject_id))]
-            if "section" in ctx.show:
+            lines = [ctx.lesson_name(l)]
+            if "section" in ctx.show and l.targets:
                 lines.append(ctx.sep.join(ctx.target_label(x) for x in l.targets))
             if "teacher" in ctx.show:
                 lines.append(ctx.sep.join(ctx.short_teacher(ctx.teachers[x]) for x in l.teacher_ids if x in ctx.teachers))
@@ -508,6 +523,12 @@ def stats_teachers(ctx: Ctx) -> Table:
             placed[tid] += ctx.placed_periods(l)
             secs[tid].update(t.section_id for t in l.targets)
             subs[tid].add(ctx.name(ctx.subjects.get(l.subject_id)))
+    for l in ctx.lessons:            # meetings that count in the teaching load
+        if l.is_meeting and l.counts_load:
+            for tid in l.teacher_ids:
+                if tid in assigned:
+                    assigned[tid] += l.periods_per_week
+                    placed[tid] += ctx.placed_periods(l)
     ids = [ctx.f["teacher_id"]] if ctx.f.get("teacher_id") else list(assigned)
     sep = ctx.sep
     rows = []
@@ -661,7 +682,7 @@ def master_table(ctx: Ctx, who: str, layout: str) -> Table:
             return "\n".join(x for x in parts if x)
         corner = ctx.L("الشعبة", "Section")
     else:
-        ids = {tid for l in ctx.scoped_lessons() for tid in l.teacher_ids}
+        ids = ctx.scoped_teacher_ids()
         if ctx.f.get("teacher_id"):
             ids = {ctx.f["teacher_id"]}
         entities = sorted((i for i in ids if i in ctx.teachers), key=lambda i: ctx.name(ctx.teachers[i]))
@@ -672,6 +693,8 @@ def master_table(ctx: Ctx, who: str, layout: str) -> Table:
             return [c for c in ctx.cards if tid in ctx.lesson[c.lesson_id].teacher_ids]
 
         def line(c, l):
+            if l.is_meeting:
+                return ctx.lesson_name(l)
             secs = ctx.sep.join(ctx.section_label(x.section_id) for x in l.targets)
             return f"{secs} · {_short_subject(ctx, l.subject_id)}" if "section" in ctx.show else _short_subject(ctx, l.subject_id)
         corner = ctx.L("المعلم", "Teacher")
@@ -1171,6 +1194,40 @@ def student_lists(ctx: Ctx) -> list[Table]:
     return tables
 
 
+def meetings_table(ctx: Ctx) -> Table:
+    """Every meeting: when, where, who — for the administration and to hand to the members."""
+    from app.models import BellSchedule
+    rows = []
+    day_ix = {d.id: i for i, d in enumerate(ctx.days)}
+    for l in sorted((l for l in ctx.lessons if l.is_meeting), key=lambda l: l.title or ""):
+        if ctx.f.get("teacher_id") and ctx.f["teacher_id"] not in l.teacher_ids:
+            continue
+        members = sorted((ctx.teachers[x] for x in l.teacher_ids if x in ctx.teachers), key=ctx.name)
+        sched = db.session.get(BellSchedule, l.bell_schedule_id) if l.bell_schedule_id else None
+        cards = sorted((c for c in ctx.cards if c.lesson_id == l.id),
+                       key=lambda c: (day_ix.get(c.weekday_id, 99), c.period_no or 0))
+        for c in cards or [None]:
+            day, period, when = "", "", ""
+            if c is not None and c.weekday_id:
+                day = ctx.name(next((d for d in ctx.days if d.id == c.weekday_id), None))
+                period = str(c.period_no) if c.duration == 1 else f"{c.period_no}–{c.period_no + c.duration - 1}"
+                if sched:
+                    sl = {x.period_no: x for x in sched.slots if x.kind == "lesson"}
+                    a, b = sl.get(c.period_no), sl.get(c.period_no + c.duration - 1)
+                    if a and b:
+                        when = _time_span(a.starts_at, b.ends_at)
+            else:
+                day = ctx.L("لم يُحدَّد موعده", "Not scheduled")
+            room = ctx.name(ctx.rooms.get((c.room_id if c is not None else None) or l.preferred_room_id))
+            rows.append([l.title or "", day, period, when, room, ctx.sep.join(ctx.name(t) for t in members), len(members),
+                         ctx.L("نعم", "Yes") if l.counts_load else ctx.L("لا", "No")])
+    return Table(title=ctx.L("جدول الاجتماعات", "Meetings timetable"),
+                 columns=[ctx.L("الاجتماع", "Meeting"), ctx.L("اليوم", "Day"), ctx.L("الحصة", "Period"),
+                          ctx.L("الوقت", "Time"), ctx.L("القاعة", "Room"), ctx.L("الأعضاء", "Members"),
+                          ctx.L("عدد الأعضاء", "Members"), ctx.L("ضمن النصاب", "In load")],
+                 rows=rows, numeric={6})
+
+
 def build_report(tt: Timetable, kind: str, lang: str, filters: dict, layout: str = "rows", style: str = "plain",
                  show: set | None = None, signature: list | None = None) -> Report:
     ctx = Ctx(tt, lang, filters, show)
@@ -1227,6 +1284,8 @@ def build_report(tt: Timetable, kind: str, lang: str, filters: dict, layout: str
         rep.tables = [absence_log(ctx)]
     elif kind == "student-lists":
         rep.tables = student_lists(ctx)
+    elif kind == "meetings":
+        rep.tables = [meetings_table(ctx)]
     if kind in MATRIX_KINDS and rep.layout == "cols":
         rep.tables = [transpose(t, ctx.L("المجموع", "Total")) for t in rep.tables]
     if "footer" not in ctx.show:

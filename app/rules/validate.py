@@ -47,8 +47,8 @@ def validate_timetable(tt: Timetable) -> dict:
             unplaced[c.lesson_id] += c.duration
     for lid, n in unplaced.items():
         l = lesson_by_id[lid]
-        _issue(warnings, "unplaced", f"{l.subject.name_ar}: {count(n, 'period')} لم تُدرَج في الجدول بعد",
-               f"{l.subject.name_en or l.subject.name_ar}: {n} period(s) not placed", lesson_id=lid, periods=n)
+        _issue(warnings, "unplaced", f"{l.label}: {count(n, 'period')} لم تُدرَج في الجدول بعد",
+               f"{l.label_en}: {n} period(s) not placed", lesson_id=lid, periods=n)
 
     # 2. Re-check every placed card with the same rule engine used on save
     seen = set()
@@ -66,10 +66,13 @@ def validate_timetable(tt: Timetable) -> dict:
                    **({"other_card_id": conf.other_card_id} if conf.other_card_id else {}))
 
     # 3. Teacher loads and daily constraints
-    required = defaultdict(int)
+    required = defaultdict(int)     # periods counted in the teaching load
+    busy = defaultdict(int)         # every period the teacher must attend (meetings included)
     for l in lessons:
         for tid in l.teacher_ids:
-            required[tid] += l.periods_per_week
+            busy[tid] += l.periods_per_week
+            if l.counts_load:
+                required[tid] += l.periods_per_week
         subj_limit = l.subject.max_teachers_per_block
         if len(l.teacher_ids) > subj_limit:
             _issue(errors, "too_many_teachers", f"{l.subject.name_ar}: عدد المعلمين يتجاوز الحد المسموح ({subj_limit})",
@@ -106,6 +109,7 @@ def validate_timetable(tt: Timetable) -> dict:
                 _issue(warnings, "teacher_under_target", f"{name}: لم يُسنَد {him} إلا {count(req, 'period')}، و{g(t.gender, 'نصابه', 'نصابها')} الأسبوعي {t.target_weekly_periods}",
                        f"{name_en}: only {req} periods assigned, target {t.target_weekly_periods}", teacher_id=t.id)
         # Feasibility: more periods than free slots in the week
+        req = busy.get(t.id, 0)
         if req:
             capacity = max_periods_any_day * len(school_days) - unavailable.get(t.id, 0)
             if t.max_periods_per_day is not None:
@@ -145,7 +149,7 @@ def validate_timetable(tt: Timetable) -> dict:
     for l in lessons:
         for tid in l.teacher_ids:
             t = teacher_by_id.get(tid)
-            if t and t.subjects and l.subject not in t.subjects:
+            if t and t.subjects and not l.is_meeting and l.subject not in t.subjects:
                 _issue(warnings, "teacher_not_qualified", f"{teacher_title(t.gender)} {t.name_ar} {g(t.gender, 'غير مسجّل', 'غير مسجّلة')} لتدريس مبحث {l.subject.name_ar}",
                        f"{t.name_en or t.name_ar} is not registered for {l.subject.name_en or l.subject.name_ar}",
                        teacher_id=t.id, lesson_id=l.id)

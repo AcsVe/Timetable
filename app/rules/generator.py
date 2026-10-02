@@ -94,7 +94,7 @@ class Problem:
         self.subjects = {s.id: s for s in db.session.scalars(select(Subject))}
         self.lessons = {l.id: l for l in db.session.scalars(select(Lesson).where(Lesson.timetable_id == tt.id))}
         self.weeks = list(range(1, tt.cycle_weeks + 1))
-        bells = BellCache(tt.term_id)
+        bells = self.bells = BellCache(tt.term_id)
         # per grade and day: period -> slot number (consecutive slot numbers = no break between)
         self.periods = {(g, d): (bells.periods(self.grades[g], day.id) or {}) for g in self.grades for d, day in enumerate(self.days)}
         self.all_periods = sorted({p for v in self.periods.values() for p in v})
@@ -118,6 +118,11 @@ class Problem:
             self.cards.append(info)
 
     def _starts_for(self, info: CardInfo, d: int) -> list[int]:
+        if info.lesson.is_meeting:     # its own timing template, or any period that exists that day
+            per = self.bells.meeting_periods(info.lesson, self.days[d].id) or {}
+            need = lambda p: [p + i for i in range(info.duration)]
+            return [p for p in sorted(per) if all(q in per for q in need(p))
+                    and (not info.lesson.bell_schedule_id or all(per[q] == per[p] + i for i, q in enumerate(need(p))))]
         grades = {self.sections[s].grade_id for s, _g in info.targets if s in self.sections}
         if not grades:
             return []
@@ -160,6 +165,8 @@ class Problem:
         return s.name_ar if s.name_ar.replace(" ", "").startswith(g.replace(" ", "")) else f"{g} / {s.name_ar}"
 
     def lesson_label(self, l: Lesson) -> str:
+        if l.is_meeting:
+            return l.label
         secs = "، ".join(self.section_label(t.section_id) + (f" ({self.groups[t.group_id].name_ar})" if t.group_id in self.groups else "")
                         for t in l.targets)
         who = "، ".join(self.teachers[t].name_ar for t in l.teacher_ids if t in self.teachers)

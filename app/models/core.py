@@ -271,6 +271,7 @@ class Teacher(SyncMixin, db.Model):
     max_gaps_per_week: Mapped[int | None] = mapped_column(Integer)
     max_consecutive: Mapped[int | None] = mapped_column(Integer)
     max_days_per_week: Mapped[int | None] = mapped_column(Integer)
+    is_head: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))  # رئيس قسم
     stages = relationship("Stage", secondary=teacher_stage)
     subjects = relationship("Subject", secondary=teacher_subject)
     __table_args__ = (live_unique("uq_teacher_user_live", "user_id", where=text("user_id IS NOT NULL AND deleted_at IS NULL")),)

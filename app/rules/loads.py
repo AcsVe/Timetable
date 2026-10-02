@@ -157,6 +157,8 @@ class LoadContext:
         for c in db.session.scalars(select(Card).where(Card.timetable_id == self.tt.id, Card.weekday_id.is_not(None))):
             placed_by_lesson[c.lesson_id] += c.duration
         for l in self.lessons:
+            if not l.counts_load:      # a meeting left out of the teaching load
+                continue
             stages = set()
             for tg in l.targets:
                 s = self.sections.get(tg.section_id)

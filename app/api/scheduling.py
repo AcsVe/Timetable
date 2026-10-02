@@ -144,6 +144,43 @@ def _parse_targets(data) -> list[Target]:
     return out
 
 
+MEETING_SUBJECT = "اجتماع"
+
+
+def meeting_subject() -> Subject:
+    """Meetings are lessons of one built-in subject «اجتماع» (its colour is the meetings' colour in the grid)."""
+    s = db.session.scalars(select(Subject).where(Subject.name_ar == MEETING_SUBJECT)).first()
+    if s is None:
+        s = Subject(name_ar=MEETING_SUBJECT, name_en="Meeting", short_ar="اجتماع", short_en="Meeting",
+                    color="#cbd5e1", max_teachers_per_block=200)
+        db.session.add(s)
+        db.session.flush()
+    elif s.max_teachers_per_block < 200:
+        s.max_teachers_per_block = 200
+    return s
+
+
+def _meeting_fields(data, lesson: Lesson | None) -> dict:
+    """Validated meeting-only fields (title, load flag, timing template)."""
+    from app.models import BellSchedule
+    out = {}
+    if lesson is None or "title" in data:
+        title = (data.get("title") or "").strip()
+        if not title:
+            raise ApiError("validation", 400, details={"field": "title", "reason": "required",
+                                                        "message": "اكتب عنوان الاجتماع، مثل: اجتماع قسم الحاسوب"})
+        if len(title) > 120:
+            raise ApiError("validation", 400, details={"field": "title", "reason": "max length 120"})
+        out["title"] = title
+    if "counts_load" in data:
+        out["counts_load"] = bool(data["counts_load"])
+    elif lesson is None:
+        out["counts_load"] = False
+    if "bell_schedule_id" in data:
+        out["bell_schedule_id"] = _ref(BellSchedule, data["bell_schedule_id"], "bell_schedule_id").id if data["bell_schedule_id"] else None
+    return out
+
+
 def _conflict_error(conflicts) -> ApiError:
     first = conflicts[0]
     return ApiError("placement_conflict", 409, details=[c.as_dict() for c in conflicts],
@@ -172,15 +209,28 @@ def get_lesson(id_):
 def create_lesson():
     data = _json()
     tt = editable_timetable(parse_uuid(data.get("timetable_id"), "timetable_id"))
-    subject = _ref(Subject, data.get("subject_id"), "subject_id")
+    kind = data.get("kind") or "lesson"
+    if kind not in ("lesson", "meeting"):
+        raise ApiError("validation", 400, details={"field": "kind", "reason": "lesson or meeting"})
+    meeting = kind == "meeting"
+    if meeting:
+        require_admin(current_user)
+        extra = _meeting_fields(data, None)
+        subject = meeting_subject()
+    else:
+        extra = {"counts_load": True}
+        subject = _ref(Subject, data.get("subject_id"), "subject_id")
     ppw = require_int(data, "periods_per_week", 1)
     duration = data.get("duration", 1)
     if isinstance(duration, bool) or not isinstance(duration, int) or not 1 <= duration <= 4:
         raise ApiError("validation", 400, details={"field": "duration", "reason": "1..4"})
     week_no = _week_no(data, tt)
     teachers = _parse_teachers(data, subject)
-    targets = _parse_targets(data)
-    lesson = Lesson(
+    if meeting and not teachers:
+        raise ApiError("validation", 400, details={"field": "teachers", "reason": "required",
+                                                    "message": "اختر أعضاء الاجتماع (معلماً واحداً على الأقل)"})
+    targets = [] if meeting else _parse_targets(data)
+    lesson = Lesson(kind=kind, **extra,
         id=parse_uuid(data["id"]) if data.get("id") else new_id(),
         timetable_id=tt.id, subject_id=subject.id, periods_per_week=ppw, duration=duration, week_no=week_no,
         preferred_room_id=_ref(Room, data["preferred_room_id"], "preferred_room_id").id if data.get("preferred_room_id") else None,
@@ -188,7 +238,8 @@ def create_lesson():
     )
     lesson.teachers = [LessonTeacher(teacher_id=tid, role=role) for tid, role in teachers]
     lesson.targets = [LessonTarget(section_id=t.section_id, group_id=t.group_id) for t in targets]
-    require_write(current_user, lesson)
+    if not meeting:
+        require_write(current_user, lesson)
     db.session.add(lesson)
     for d in card_durations(ppw, duration):
         db.session.add(Card(timetable_id=tt.id, lesson=lesson, duration=d, week_no=week_no))
@@ -212,8 +263,19 @@ def update_lesson(id_):
     data = _json()
     lesson = _get(Lesson, id_)
     tt = editable_timetable(lesson.timetable_id)
-    require_write(current_user, lesson)
+    meeting = lesson.is_meeting
+    if meeting:
+        require_admin(current_user)
+        if data.get("kind") not in (None, "meeting"):
+            raise ApiError("validation", 400, details={"field": "kind", "reason": "cannot change"})
+        data.pop("subject_id", None)
+        data.pop("targets", None)
+    else:
+        require_write(current_user, lesson)
+        if data.get("kind") not in (None, "lesson"):
+            raise ApiError("validation", 400, details={"field": "kind", "reason": "cannot change"})
     check_version(lesson, data.get("version"))
+    extra = _meeting_fields(data, lesson) if meeting else {}
 
     subject = _ref(Subject, data["subject_id"], "subject_id") if "subject_id" in data else lesson.subject
     teachers = _parse_teachers(data, subject) if "teachers" in data else [(t.teacher_id, t.role) for t in lesson.teachers]
@@ -229,8 +291,14 @@ def update_lesson(id_):
     live_cards = [c for c in lesson.cards if c.deleted_at is None]
     own_ids = {c.id for c in live_cards}
 
+    if meeting and not teachers:
+        raise ApiError("validation", 400, details={"field": "teachers", "reason": "required",
+                                                    "message": "اختر أعضاء الاجتماع (معلماً واحداً على الأقل)"})
+    for k, v in extra.items():
+        setattr(lesson, k, v)
+
     # Re-check placed cards against the new teachers/targets/week before changing anything.
-    if "teachers" in data or "targets" in data or "week_no" in data:
+    if "teachers" in data or "targets" in data or "week_no" in data or "bell_schedule_id" in data:
         checker = PlacementChecker(tt)
         teacher_ids = [t for t, _ in teachers]
         conflicts = []
@@ -257,7 +325,8 @@ def update_lesson(id_):
         lesson.targets.clear()
         db.session.flush()
         lesson.targets = [LessonTarget(section_id=t.section_id, group_id=t.group_id) for t in targets]
-    require_write(current_user, lesson)  # cannot retarget into a stage you don't own
+    if not meeting:
+        require_write(current_user, lesson)  # cannot retarget into a stage you don't own
 
     reset = duration != lesson.duration
     lesson.duration = duration
@@ -430,7 +499,8 @@ def copy_timetable_data(src: Timetable, name: str, term_id=None, new_id_=None) -
     card_map = {}
     for l in db.session.scalars(select(Lesson).where(Lesson.timetable_id == src.id)):
         nl = Lesson(timetable_id=new.id, subject_id=l.subject_id, periods_per_week=l.periods_per_week,
-                    duration=l.duration, week_no=l.week_no, preferred_room_id=l.preferred_room_id, notes=l.notes)
+                    duration=l.duration, week_no=l.week_no, preferred_room_id=l.preferred_room_id, notes=l.notes,
+                    kind=l.kind, title=l.title, counts_load=l.counts_load, bell_schedule_id=l.bell_schedule_id)
         nl.teachers = [LessonTeacher(teacher_id=t.teacher_id, role=t.role) for t in l.teachers]
         nl.targets = [LessonTarget(section_id=t.section_id, group_id=t.group_id) for t in l.targets]
         db.session.add(nl)

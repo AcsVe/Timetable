@@ -97,7 +97,8 @@ class PlacementChecker:
         out: list[Conflict] = []
         steps = (
             lambda: self._check_day(weekday_id),
-            lambda: self._check_bells(targets, weekday_id, period_no, duration),
+            (lambda: self._check_meeting_bells(lesson, weekday_id, period_no, duration)) if lesson.is_meeting
+            else (lambda: self._check_bells(targets, weekday_id, period_no, duration)),
             lambda: self._check_availability(lesson, teacher_ids, targets, room_id, weekday_id, period_no, duration),
             lambda: self._check_busy("teacher", teacher_ids, weekday_id, period_no, duration, week_no, exclude_card_ids),
             lambda: self._check_room(lesson, room_id, weekday_id, period_no, duration, week_no, exclude_card_ids),
@@ -146,6 +147,21 @@ class PlacementChecker:
                 out.append(Conflict("crosses_break", "لا يجوز أن تتخلّل الاستراحةُ الحصةَ المزدوجة",
                                     "A double lesson cannot span a break", extra={"grade_id": grade.id}))
         return out
+
+    def _check_meeting_bells(self, lesson, weekday_id, period_no, duration):
+        periods = self.bells.meeting_periods(lesson, weekday_id)
+        if not periods:
+            return [Conflict("no_bell_schedule", "لا يوجد توقيت حصص لهذا اليوم", "No bell times on this day")]
+        needed = range(period_no, period_no + duration)
+        missing = [p for p in needed if p not in periods]
+        if missing:
+            return [Conflict("period_not_in_schedule", f"لا توجد الحصة {missing[0]} في توقيت الاجتماع لهذا اليوم",
+                             f"Period {missing[0]} does not exist in the meeting's timing on this day",
+                             extra={"period_no": missing[0]})]
+        if lesson.bell_schedule_id and any(periods[p] != periods[period_no] + i for i, p in enumerate(needed)):
+            return [Conflict("crosses_break", "لا يجوز أن تتخلّل الاستراحةُ الاجتماعَ الممتد لأكثر من حصة",
+                             "A meeting cannot span a break")]
+        return []
 
     def _check_availability(self, lesson, teacher_ids, targets, room_id, weekday_id, period_no, duration):
         entities = [("teacher", t) for t in teacher_ids] + [("section", t.section_id) for t in targets]
@@ -261,7 +277,7 @@ class PlacementChecker:
     def _card_desc(self, card_id) -> str:
         card = db.session.get(Card, card_id)
         lesson = db.session.get(Lesson, card.lesson_id)
-        return lesson.subject.name_ar
+        return lesson.label
 
     def _entity_name(self, kind, id_) -> str:
         model = {"teacher": Teacher, "section": Section, "subject": Subject, "room": Room}[kind]
@@ -307,6 +323,8 @@ def rebuild_occupancy(card: Card, lesson: Lesson | None = None, tt: Timetable | 
 def grid_periods(checker: PlacementChecker, lesson: Lesson, weekday_id) -> list[int]:
     """Union of lesson period numbers across the lesson's grades for one day."""
     nums: set[int] = set()
+    if lesson.is_meeting:
+        return sorted((checker.bells.meeting_periods(lesson, weekday_id) or {}).keys())
     for t in lesson.targets:
         sec = db.session.get(Section, t.section_id)
         p = checker.bells.periods(sec.grade, weekday_id)

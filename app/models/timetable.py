@@ -62,6 +62,14 @@ class Lesson(SyncMixin, db.Model):
     week_no: Mapped[int | None] = mapped_column(Integer)
     preferred_room_id: Mapped[uuid.UUID | None] = uuid_fk("room.id", nullable=True)
     notes: Mapped[str | None] = mapped_column(Text)
+    # A meeting (department meeting, heads of department…) is a lesson with teachers and no classes:
+    # it blocks its members like a lesson, shows in their timetables under its title, and may be left
+    # out of their weekly teaching load.
+    kind: Mapped[str] = mapped_column(enum("lesson", "meeting", name="lesson_kind"), nullable=False,
+                                      default="lesson", server_default="lesson")
+    title: Mapped[str | None] = mapped_column(Text)
+    counts_load: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+    bell_schedule_id: Mapped[uuid.UUID | None] = uuid_fk("bell_schedule.id", nullable=True)
 
     subject = relationship("Subject")
     timetable = relationship("Timetable")
@@ -72,6 +80,23 @@ class Lesson(SyncMixin, db.Model):
         CheckConstraint("periods_per_week >= 1", name="ppw_pos"),
         CheckConstraint("duration BETWEEN 1 AND 4", name="duration_range"),
     )
+
+    @property
+    def is_meeting(self) -> bool:
+        return self.kind == "meeting"
+
+    @property
+    def label(self) -> str:
+        """What the lesson is called in grids, reports and messages: the meeting title or the subject."""
+        if self.kind == "meeting" and self.title:
+            return self.title
+        return self.subject.name_ar
+
+    @property
+    def label_en(self) -> str:
+        if self.kind == "meeting" and self.title:
+            return self.title
+        return self.subject.name_en or self.subject.name_ar
 
     @property
     def teacher_ids(self) -> list[uuid.UUID]:

@@ -42,3 +42,28 @@ class BellCache:
             sched = resolve_schedule(self.term_id, grade, weekday_id)
             self._cache[key] = lesson_periods(sched) if sched else None
         return self._cache[key]
+
+    def schedule_periods(self, schedule_id: uuid.UUID) -> dict[int, int] | None:
+        key = ("schedule", schedule_id)
+        if key not in self._cache:
+            sched = db.session.get(BellSchedule, schedule_id)
+            self._cache[key] = lesson_periods(sched) if sched else None
+        return self._cache[key]
+
+    def any_periods(self, weekday_id: uuid.UUID) -> dict[int, int]:
+        """Every period number that exists for some grade on that day (a meeting without its own timing)."""
+        key = ("any", weekday_id)
+        if key not in self._cache:
+            ids = set(db.session.scalars(select(BellAssignment.bell_schedule_id).where(
+                BellAssignment.term_id == self.term_id, BellAssignment.weekday_id == weekday_id)))
+            out: dict[int, int] = {}
+            for sid in ids:
+                for p, slot in (self.schedule_periods(sid) or {}).items():
+                    out.setdefault(p, p)    # slot numbers differ between schedules: no break check here
+            self._cache[key] = out
+        return self._cache[key]
+
+    def meeting_periods(self, lesson, weekday_id: uuid.UUID) -> dict[int, int] | None:
+        if lesson.bell_schedule_id:
+            return self.schedule_periods(lesson.bell_schedule_id)
+        return self.any_periods(weekday_id)

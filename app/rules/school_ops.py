@@ -125,10 +125,21 @@ def teacher_lesson_times(tt: Timetable) -> dict:
     cache: dict = {}
     for c in db.session.scalars(select(Card).where(Card.timetable_id == tt.id, Card.weekday_id.is_not(None))):
         l = lessons.get(c.lesson_id)
-        if l is None or not l.targets:
+        if l is None:
             continue
-        grade = l.targets[0].section.grade
-        key = (grade.id, c.weekday_id)
+        if l.is_meeting:
+            if not l.bell_schedule_id:
+                continue
+            key = ("schedule", l.bell_schedule_id)
+            if key not in cache:
+                from app.models import BellSchedule
+                sched = db.session.get(BellSchedule, l.bell_schedule_id)
+                cache[key] = {s.period_no: (s.starts_at, s.ends_at) for s in sched.slots if s.kind == "lesson"} if sched else {}
+        elif not l.targets:
+            continue
+        else:
+            grade = l.targets[0].section.grade
+            key = (grade.id, c.weekday_id)
         if key not in cache:
             sched = resolve_schedule(tt.term_id, grade, c.weekday_id)
             cache[key] = {s.period_no: (s.starts_at, s.ends_at) for s in sched.slots if s.kind == "lesson"} if sched else {}
@@ -137,7 +148,7 @@ def teacher_lesson_times(tt: Timetable) -> dict:
         if not slots:
             continue
         for tid in l.teacher_ids:
-            out[tid][c.weekday_id].append((slots[0][0], slots[-1][1], l.subject.name_ar))
+            out[tid][c.weekday_id].append((slots[0][0], slots[-1][1], l.label))
     return out
 
 

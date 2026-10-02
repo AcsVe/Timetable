@@ -56,6 +56,8 @@ def stages_of(obj) -> set[uuid.UUID] | None:
     if isinstance(obj, BellAssignment):
         return {obj.stage_id}
     if isinstance(obj, Lesson):
+        if obj.kind == "meeting":      # meetings belong to the whole school: admins only
+            return GLOBAL
         return {_section_stage(t.section_id) for t in obj.targets} - {None}
     if isinstance(obj, Card):
         return stages_of(obj.lesson or db.session.get(Lesson, obj.lesson_id))

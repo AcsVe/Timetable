@@ -170,3 +170,26 @@ def test_rename_a_floor_and_add_a_corridor(page):
     page.click("#edit-lists")
     assert page.locator("#list-locations input.tree-sub").evaluate_all("xs => xs.map(x => x.value)").count("ممر المختبرات") == 1
     assert not page.errors
+
+
+def test_meeting_from_its_page_shows_in_the_teacher_grid(page):
+    page.goto(f"{page.base}/#/setup/teachers")
+    row = page.locator("table.data tbody tr", has_text="محمود")
+    row.locator("button", has_text="تعديل").click()
+    page.check("#f-is_head")
+    page.click("#modal-form button[type=submit]")
+    expect(page.locator("table.data tbody tr", has_text="محمود")).to_contain_text("✓")
+    page.goto(f"{page.base}/#/meetings")
+    page.click("#add-meeting")
+    page.fill("#f-title", "اجتماع رؤساء الأقسام")
+    page.click("#add-heads")
+    expect(page.locator("#f-teachers .count")).to_contain_text("1 من")
+    page.select_option("#f-weekday_id", label="الأحد")
+    page.fill("#f-period_no", "3")
+    page.click("#modal-form button[type=submit]")
+    expect(page.locator("table.data tbody tr")).to_contain_text("اجتماع رؤساء الأقسام")
+    expect(page.locator("table.data tbody tr")).to_contain_text("الحصة 3")
+    page.goto(f"{page.base}/#/reports")
+    page.select_option("#report-kind", "meetings")
+    expect(page.locator(".report-preview")).to_contain_text("اجتماع رؤساء الأقسام")
+    assert not page.errors

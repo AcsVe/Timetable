@@ -10,6 +10,7 @@ const ROUTES = {
   validate: () => import('./views/validate.js'),
   reports: () => import('./views/reports.js'),
   loads: () => import('./views/loads.js'),
+  meetings: () => import('./views/meetings.js'),
   cover: () => import('./views/cover.js'),
   generate: () => import('./views/generate.js'),
   mail: () => import('./views/mail.js'),
