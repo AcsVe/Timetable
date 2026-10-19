@@ -17,6 +17,7 @@ from sqlalchemy.dialects.postgresql import Range
 from sqlalchemy.orm import selectinload
 
 from app.api.scheduling import _sync_cards, card_durations, editable_timetable
+from app.arabic import count
 from app.errors import ApiError
 from app.extensions import db
 from app.importing.asc import split_class_name
@@ -552,7 +553,14 @@ class Importer:
         existing = db.session.scalars(select(Lesson).where(Lesson.timetable_id == tt.id).options(
             selectinload(Lesson.teachers), selectinload(Lesson.targets), selectinload(Lesson.cards))).all()
         sig = lambda subj, targets, teachers: (subj, frozenset(targets), frozenset(teachers))  # noqa: E731
-        by_sig = {sig(l.subject_id, [(t.section_id, t.group_id) for t in l.targets], l.teacher_ids): l for l in existing}
+        # Re-importing must not duplicate, so a lesson with the same subject, classes and teachers is reused.
+        # But aSc may hold two such lessons on purpose (e.g. two separate single periods): each aSc lesson claims
+        # its own, so the second one is created (and kept on later re-imports) instead of merged away. A
+        # spreadsheet row repeating a lesson still updates it, as before.
+        by_sig = defaultdict(list)
+        for l in existing:
+            by_sig[sig(l.subject_id, [(t.section_id, t.group_id) for t in l.targets], l.teacher_ids)].append(l)
+        claimed = set()
         asc = not self.b.by_name
         for rec in self.b.lessons:
             subj = self.k_subject.get(rec["subject"]) if asc else self.find_subject(rec["subject"])
@@ -592,7 +600,7 @@ class Importer:
             db.session.flush()
             key = sig(subj.id, [(s.id, g.id if g else None) for s, g in targets], [t.id for t in teachers])
             ppw, dur = rec["ppw"], min(rec["duration"], rec["ppw"])
-            lesson = by_sig.get(key)
+            lesson = next((l for l in by_sig.get(key, []) if l.id not in claimed), None)
             label = f"{subj.name_ar} — {'، '.join(s.name_ar for s, _ in targets)}"
             if lesson is not None:
                 live = [c for c in lesson.cards if c.deleted_at is None]
@@ -613,7 +621,9 @@ class Importer:
                 self._upsert("lessons", lesson, {}, True, label)
                 for d in card_durations(ppw, dur):
                     db.session.add(Card(id=new_id(), timetable_id=tt.id, lesson=lesson, duration=d))
-                by_sig[key] = lesson
+                by_sig[key].append(lesson)
+            if asc:
+                claimed.add(lesson.id)
             if rec.get("key"):
                 self.k_lesson[rec["key"]] = lesson
             # Teachers teach this subject in these stages (used by permissions and pickers).
@@ -962,6 +972,7 @@ class Importer:
             by_lesson[c["lesson"]].append(c)
         existing = {(a.entity_id, a.weekday_id, a.period_no) for a in db.session.scalars(select(Availability).where(
             Availability.timetable_id == self.tt.id, Availability.entity_type == "teacher"))}
+        summary = defaultdict(lambda: [0, 0, set()])     # subject name -> [meetings, slots, teacher ids]
         for m in self.b.meetings:
             teachers = [self.k_teacher[k] for k in m["teachers"] if k in self.k_teacher]
             subj = self.k_subject.get(m["subject"])
@@ -973,10 +984,18 @@ class Importer:
                         db.session.add(Availability(id=new_id(), timetable_id=self.tt.id, entity_type="teacher",
                                                     entity_id=t.id, weekday_id=wd, period_no=p, status="unavailable"))
                         existing.add((t.id, wd, p))
+            s = summary[name]
+            s[0] += 1
+            s[1] += len(slots)
+            s[2] |= {t.id for t in teachers}
+        for name, (n, slots, teachers) in summary.items():   # one line per subject, not one per meeting
+            what = f"«{name}»: اجتماع بلا شعبة" if n == 1 else f"«{name}»: {count(n, 'meeting')} بلا شعبة"
             self._issue("warning",
-                        f"«{name}» اجتماع بلا شعبة؛ سُجِّلت أوقاته ({len(slots)}) أوقاتَ عدم توفر لمعلميه ({len(teachers)})",
-                        f"'{name}' is a meeting without a class; its times ({len(slots)}) were set as unavailable for its {len(teachers)} teachers",
-                        where="aSc")
+                        f"{what}؛ سُجِّلت أوقاتها ({count(slots, 'period')}) أوقاتَ عدم توفر لمعلميها ({count(len(teachers), 'teacher')})"
+                        if n > 1 else
+                        f"{what}؛ سُجِّلت أوقاته ({count(slots, 'period')}) أوقاتَ عدم توفر لمعلميه ({count(len(teachers), 'teacher')})",
+                        f"'{name}': {n} meeting(s) without a class; their times ({slots}) were set as unavailable for "
+                        f"{len(teachers)} teacher(s)", where="aSc")
 
 
 def recount_students(section_ids) -> None:

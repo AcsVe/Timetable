@@ -63,7 +63,7 @@ export async function render(root) {
     [[30, '30 ثانية'], [60, 'دقيقة'], [120, 'دقيقتان'], [300, '5 دقائق'], [600, '10 دقائق']].map(([v, l]) => h('option', { value: v, selected: v === 60 }, t(l))));
   ui.unplaced = h('input', { type: 'checkbox', id: 'gen-allow-unplaced', checked: true });
   ui.explain = h('input', { type: 'checkbox', id: 'gen-explain', checked: true });
-  ui.w = { w_gaps: num('w_gaps', 6, 0, 100), w_class_gaps: num('w_class_gaps', 8, 0, 100), w_spread: num('w_spread', 25, 0, 100), w_consecutive: num('w_consecutive', 12, 0, 100),
+  ui.w = { w_gaps: num('w_gaps', 6, 0, 100), w_class_gaps: num('w_class_gaps', 8, 0, 100), w_spread: num('w_spread', 100, 0, 200), w_consecutive: num('w_consecutive', 12, 0, 100),
            w_move: num('w_move', 40, 0, 500), seed: num('seed', 1, 0, 99999), workers: num('workers', 0, 0, 16) };
   const options = h('section', { class: 'stat gen-options' }, modeBox,
     h('div', { class: 'toolbar' }, h('label', { class: 'inline' }, `${t('الناتج')}:`, ui.target), ui.name),

@@ -16,6 +16,8 @@ def test_arabic_counted_nouns():
     assert count(24, "slot") == "24 خانة"
     assert count(103, "day") == "103 أيام"
     assert count(1, "teacher") == "معلم واحد"
+    assert count(11, "day") == "11 يوماً" and count(47, "meeting") == "47 اجتماعاً" and count(35, "teacher") == "35 معلماً"
+    assert count(3, "meeting") == "3 اجتماعات" and count(2, "meeting", "gen") == "اجتماعين"
 
 
 def test_every_ui_string_has_an_english_translation():

@@ -76,6 +76,11 @@ def fix_encoding(xml: bytes) -> bytes:
     high = bytes(b for b in xml if b >= 0x80)
     if not high:
         return xml
+    try:                       # saved again as UTF-8 by another program, declaration left as it was
+        xml.decode("utf-8")
+        return xml[:m.start(2)] + b"utf-8" + xml[m.end(2):]
+    except UnicodeDecodeError:
+        pass
     text = high.decode("cp1256", "replace")
     arabic = sum(1 for ch in text if "\u0600" <= ch <= "\u06ff")
     if arabic / len(text) < 0.6:
@@ -146,6 +151,11 @@ def _num(v, default=None):
         return default
 
 
+def damaged(name: str) -> bool:
+    """Text that lost its letters on the way (a file re-saved with the wrong encoding): '����'."""
+    return "\ufffd" in name
+
+
 def _ids(v) -> list[str]:
     return [x for x in (p.strip() for p in clean(v).split(",")) if x]
 
@@ -190,6 +200,8 @@ def parse_asc(data: bytes, filename: str = "") -> Bundle:
             start, end = time_text(p.get("starttime")), time_text(p.get("endtime"))
         except ValueError:
             start = end = None
+        if start == end:           # aSc writes 0:00–0:00 when the times were never entered
+            start = end = None
         raw_periods.append({"no": int(no), "start": start, "end": end, "name": clean(p.get("name"))})
     offset = 1 if raw_periods and min(p["no"] for p in raw_periods) == 0 else 0
     if offset:
@@ -203,9 +215,12 @@ def parse_asc(data: bytes, filename: str = "") -> Bundle:
     day_defs = {d.get("id"): clean(d.get("days")).split(",") for d in each("daysdef")}
     b.days = max((len(x) for v in day_defs.values() for x in v), default=0)
 
+    # several weeks only matter when a lesson or a card actually uses part of them ("10" = week A);
+    # aSc lists "Week A / Week B" definitions in every file, used or not
     weeks_defs = {w.get("id"): clean(w.get("weeks")) for w in each("weeksdef")}
-    cycle = max((len(x) for v in weeks_defs.values() for x in v.split(",")), default=1)
-    if cycle > 1:
+    partial = lambda v: any("0" in x and "1" in x for x in clean(v).split(","))  # noqa: E731
+    used = [weeks_defs.get(clean(les.get("weeksdefid")), "") for les in each("lesson")]
+    if any(partial(v) for v in used) or any(partial(c.get("weeks")) for c in each("card")):
         b.warn("الجدول في aSc متعدد الأسابيع؛ استُوردت الحصص على أنها أسبوعية",
                "The aSc timetable has several weeks; lessons were imported as weekly")
 
@@ -268,8 +283,25 @@ def parse_asc(data: bytes, filename: str = "") -> Bundle:
         cnt = _num(gr.get("studentcount"))
         divisions[(cid, clean(gr.get("divisiontag")) or "1")].append(
             {"key": gid, "name": clean(gr.get("name")) or gid, "student_count": int(cnt) if cnt else None})
+    lost = 0
+    numbered = defaultdict(int)       # per class, so its divisions keep different names
     for (cid, _tag), groups in divisions.items():
+        for g in groups:
+            numbered[cid] += 1
+            if damaged(g["name"]):
+                g["name"] = f"المجموعة {numbered[cid]}"
+                lost += 1
         b.divisions.append({"section": cid, "name": " / ".join(g["name"] for g in groups), "groups": groups})
+
+    if lost:
+        b.warn("أسماء المجموعات في الملف تالفة (رموز �) لأن الملف حُفظ بترميز غير صحيح؛ "
+               "سُمّيت «المجموعة 1» و«المجموعة 2»… فعدّلها من صفحة الشعب",
+               "Group names in the file are damaged (� marks: the file was saved with the wrong encoding); "
+               "they were named 'المجموعة 1', 'المجموعة 2'… — rename them on the Sections page", "groups")
+    bad = sorted({x["name"] for x in (*b.subjects, *b.teachers, *b.rooms, *b.sections) if damaged(x["name"])})
+    if bad:
+        b.warn(f"في الملف أسماء تالفة (رموز �): {'، '.join(bad[:10])}؛ عدّلها بعد الاستيراد",
+               f"Some names in the file are damaged (� marks): {', '.join(bad[:10])}; rename them after the import")
 
     # lessons -------------------------------------------------------------
     for les in each("lesson"):

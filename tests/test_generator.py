@@ -113,3 +113,39 @@ def test_stop_and_stale_runs(app, gen, ctx):
     row.status, row.heartbeat_at = "running", utcnow() - timedelta(minutes=5)
     ctx.commit()
     assert a.ok("get", f"/api/generator/runs/{r['id']}")["status"] == "failed"
+
+
+def test_interchangeable_cards_share_variables_and_keep_their_places(app, gen, ctx):
+    """Cards of one lesson are interchangeable: one set of variables for all of them. The cards that can
+    keep their places do (repair on a valid timetable moves nothing)."""
+    from app.models import Timetable
+    from app.rules import generator as G
+    a, s = gen["api"], gen
+    tt = ctx.get(Timetable, __import__("uuid").UUID(s["tt"]))
+    pb = G.Problem(tt, "full")
+    units = G.make_units(pb)
+    assert sum(len(u) for u in units) == len(pb.cards) == 32     # 34 periods; 10A maths (4) is 2 doubles
+    assert len(units) == 8                                          # one per lesson
+    # two cards of a lesson chosen at the same two places: each keeps its own when it is among them
+    u = next(u for u in units if len(u) >= 2)
+    pb.cards[u[0]].cur, pb.cards[u[1]].cur = (0, 1), (2, 3)
+    got = G.unit_placement(pb, [u], {0: [(2, 3), (0, 1)] + [(4, k) for k in range(1, len(u) - 1)]})
+    assert got[u[0]] == (0, 1) and got[u[1]] == (2, 3)
+    first = run(app, a, s, target="same")
+    assert first["status"] == "solved"
+    rep = run(app, a, s, mode="repair", target="same")
+    assert rep["status"] == "solved" and rep["metrics"]["after"]["moved_cards"] == 0
+
+
+def test_worker_count_follows_the_cpu_quota(monkeypatch):
+    from app.rules import generator as G
+    monkeypatch.delenv("GENERATOR_WORKERS", raising=False)
+    monkeypatch.setattr(G, "usable_cpus", lambda: 0.1)        # Render's free plan
+    assert G.auto_workers() == 2
+    monkeypatch.setattr(G, "usable_cpus", lambda: 64.0)       # a big host: memory stays bounded
+    assert G.auto_workers() == 8
+    monkeypatch.setattr(G, "usable_cpus", lambda: 4.0)
+    assert G.auto_workers() == 4
+    monkeypatch.setenv("GENERATOR_WORKERS", "3")
+    assert G.auto_workers() == 3
+    assert G.usable_cpus() > 0

@@ -296,3 +296,74 @@ def test_grade_numbers_match_names_written_in_words():
     from app.importing.apply import grade_number
     assert [grade_number(n) for n in ("الصف السابع", "الصف الحادي عشر", "الثاني عشر", "الصف الثاني", "الصف 7", "Grade 10", "صف")] \
         == [7, 11, 12, 2, 7, 10, None]
+
+
+def test_asc_export_resaved_as_utf8_with_lost_names_and_no_times(base, ctx):
+    """The school's real export: declared windows-1252 but stored as UTF-8 with Arabic group names already
+    lost (�), all times 0:00, 'Week A/B' definitions nobody uses, and one meeting lesson per teacher."""
+    xml = ASC_XML.replace('encoding="UTF-8"', 'encoding="windows-1252"')
+    for a_, b_ in (('starttime="7:45" endtime="8:30"', 'starttime="0:00" endtime="0:00"'),
+                   ('starttime="8:30" endtime="9:15"', 'starttime="0:00" endtime="0:00"'),
+                   ('starttime="9:35" endtime="10:20"', 'starttime="0:00" endtime="0:00"'),
+                   ('starttime="10:20" endtime="11:05"', 'starttime="0:00" endtime="0:00"'),
+                   ('name="بنين"', 'name="����"'), ('name="بنات"', 'name="�����"')):
+        xml = xml.replace(a_, b_)
+    xml = xml.replace('<weeksdef id="*1" name="Every week" short="All" weeks="1"/>',
+                      '<weeksdef id="*1" name="All weeks" short="All" weeks="11"/>'
+                      '<weeksdef id="*A" name="Week A" short="A" weeks="10"/><weeksdef id="*B" name="Week B" short="B" weeks="01"/>')
+    meetings = "".join(f'<lesson id="M{t}" classids="" groupids="" subjectid="S1" periodspercard="1" periodsperweek="1.0" '
+                       f'teacherids="{t}" daysdefid="*1" weeksdefid="*1"/>' for t in ("T1", "T2", "T3"))
+    xml = xml.replace('<lesson id="L4"', meetings + '<lesson id="L4"')
+    xml = xml.replace('</cards>', '<card lessonid="MT1" period="4" days="00001" weeks="11"/>'
+                                  '<card lessonid="MT2" period="4" days="00001" weeks="11"/>'
+                                  '<card lessonid="MT3" period="3" days="00001" weeks="11"/></cards>')
+    rep = upload(base, "/api/import/commit", xml.encode("utf-8"), "data.xml").get_json()
+    assert rep["error_count"] == 0, rep["errors"]
+    msgs = [w["message"] for w in rep["warnings"]]
+    # names: the lost ones get a neutral name, nothing like 'ï¿½' is stored
+    assert sorted(g.name_ar for g in ctx.query(StudentGroup)) == ["المجموعة 1", "المجموعة 2"]
+    from app.importing.asc import parse_asc
+    two = xml.replace('<group id="G4"', '<group id="G6" classid="C1" name="\ufffd\ufffd 1" entireclass="0" divisiontag="2"/>'
+                                         '<group id="G7" classid="C1" name="\ufffd\ufffd 2" entireclass="0" divisiontag="2"/><group id="G4"')
+    names = [d["name"] for d in parse_asc(two.encode("utf-8")).divisions]
+    assert names == ["المجموعة 1 / المجموعة 2", "المجموعة 3 / المجموعة 4"]       # two divisions of 7أ stay distinct
+    assert any("تالفة" in m for m in msgs)
+    assert not any("ï¿½" in (t.name_ar or "") for t in ctx.query(Teacher))
+    # times: 0:00 means "not entered" — approximate times, no "out of order" correction
+    assert any("لا توجد أوقات للحصص" in m for m in msgs)
+    assert not any("صُحِّحت" in m for m in msgs)
+    # week A/B defined but unused: no multi-week warning
+    assert not any("متعدد الأسابيع" in m for m in msgs)
+    # three meetings: one summary line, correct number agreement
+    meeting_msgs = [m for m in msgs if "بلا شعبة" in m]
+    assert meeting_msgs == ["«الرياضيات»: 3 اجتماعات بلا شعبة؛ سُجِّلت أوقاتها (3 حصص) أوقاتَ عدم توفر لمعلميها (3 معلمين)"]
+    assert rep["cards"]["unplaced"] == 0
+
+
+def test_asc_two_identical_lessons_stay_two(base, ctx):
+    """aSc can hold the same subject, class and teachers twice as separate lessons (the school's 'Art &
+    Vocational': two single periods). Both are imported, both cards placed; re-importing adds nothing."""
+    xml = ASC_XML.replace('<lesson id="L4"', '<lesson id="L5" classids="C2" groupids="G4" subjectid="S1" periodspercard="1" '
+                          'periodsperweek="1.0" teacherids="T1,T3" daysdefid="*1" weeksdefid="*1"/>'
+                          '<lesson id="L6" classids="C2" groupids="G4" subjectid="S1" periodspercard="1" '
+                          'periodsperweek="1.0" teacherids="T3,T1" daysdefid="*1" weeksdefid="*1"/><lesson id="L4"')
+    xml = xml.replace('</cards>', '<card lessonid="L5" period="3" days="00010" weeks="1"/>'
+                                  '<card lessonid="L6" period="4" days="00010" weeks="1"/></cards>')
+    rep = upload(base, "/api/import/commit", xml.encode(), "x.xml").get_json()
+    assert rep["error_count"] == 0 and rep["summary"]["lessons"]["created"] == 6, rep["summary"]["lessons"]
+    assert rep["cards"] == {"placed": 8, "unplaced": 0}
+    sec = ctx.query(Section).filter_by(name_ar="7ب").one()
+    maths = [l for l in ctx.query(Lesson).join(Subject).filter(Subject.name_ar == "الرياضيات") if l.targets[0].section_id == sec.id]
+    assert len(maths) == 2 and sum(l.periods_per_week for l in maths) == 2
+    rep2 = upload(base, "/api/import/commit", xml.encode(), "x.xml", timetable_id=rep["timetable"]["id"]).get_json()
+    assert rep2["summary"]["lessons"]["created"] == 0 and rep2["summary"]["lessons"]["unchanged"] == 6
+    assert ctx.query(Lesson).count() == 6
+
+
+def test_asc_week_a_b_lessons_still_warn():
+    from app.importing.asc import parse_asc
+    xml = ASC_XML.replace('<weeksdef id="*1" name="Every week" short="All" weeks="1"/>',
+                          '<weeksdef id="*1" name="All" short="All" weeks="11"/><weeksdef id="*A" name="A" short="A" weeks="10"/>')
+    xml = xml.replace('teacherids="T1" daysdefid="*1" weeksdefid="*1"/>', 'teacherids="T1" daysdefid="*1" weeksdefid="*A"/>', 1)
+    b = parse_asc(xml.encode())
+    assert any("متعدد الأسابيع" in w.message for w in b.warnings)

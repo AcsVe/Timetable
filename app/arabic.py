@@ -3,7 +3,7 @@ from __future__ import annotations
 
 # noun -> (singular, dual, plural 3–10); the dual in the genitive/accusative is DUAL_GEN
 DUAL_GEN = {"period": "حصتين", "slot": "خانتين", "gap": "فجوتين", "day": "يومين", "card": "بطاقتين", "teacher": "معلمَين",
-            "session": "مراقبتين"}
+            "session": "مراقبتين", "meeting": "اجتماعين"}
 NOUNS = {
     "period": ("حصة", "حصتان", "حصص"),
     "slot": ("خانة", "خانتان", "خانات"),
@@ -12,7 +12,10 @@ NOUNS = {
     "card": ("بطاقة", "بطاقتان", "بطاقات"),
     "teacher": ("معلم", "معلمان", "معلمين"),
     "session": ("مراقبة", "مراقبتان", "مراقبات"),
+    "meeting": ("اجتماع", "اجتماعان", "اجتماعات"),
 }
+# masculine nouns after 11–99 take the accusative with tanween: «11 يوماً»، «47 اجتماعاً»
+ACCUSATIVE = {"day": "يوماً", "teacher": "معلماً", "meeting": "اجتماعاً"}
 FEMININE = {"period", "slot", "gap", "card", "session"}
 
 
@@ -26,6 +29,8 @@ def count(n: int, noun: str, case: str = "nom") -> str:
     r = n % 100
     if 3 <= r <= 10:
         return f"{n} {few}"
+    if 11 <= r <= 99 and noun in ACCUSATIVE:
+        return f"{n} {ACCUSATIVE[noun]}"
     return f"{n} {one}"
 
 

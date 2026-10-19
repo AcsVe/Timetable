@@ -1,6 +1,7 @@
 """Automatic timetable generator (ERD §12) on Google OR-Tools CP-SAT.
 
-One boolean x[card, day, start] for every place a card may start. Hard rules are the same as the
+One boolean x[unit, day, start] for every place a card may start; a unit is the set of interchangeable
+cards of one lesson (see make_units). Hard rules are the same as the
 placement checker's (teachers, sections with their divisions/groups, rooms, bell times and breaks,
 time-off), plus each teacher's limits. Soft goals, each with its own weight: few teacher gaps, a lesson's
 periods spread over the week, no long runs of consecutive periods, and — in repair mode — moving as few
@@ -13,6 +14,7 @@ Modes:  full   — re-place every unlocked card (locked cards stay);
 """
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from collections import defaultdict
@@ -39,8 +41,38 @@ from app.models import (
 from app.rules.bells import BellCache
 
 DEFAULTS = {"time_limit": 60, "workers": 0, "seed": 1, "allow_unplaced": True, "explain": True,
-            "w_gaps": 6, "w_spread": 25, "w_consecutive": 12, "w_move": 40, "w_unplaced": 1000,
+            "w_gaps": 6, "w_spread": 100, "w_consecutive": 12, "w_move": 40, "w_unplaced": 1000,
             "w_daily_max": 30, "w_class_gaps": 8}
+
+
+def usable_cpus() -> float:
+    """CPUs this process may really use: the container's CPU quota (cgroup v2 or v1) when there is one,
+    otherwise the CPUs it may run on. os.cpu_count() reports the host's, often far more."""
+    try:
+        n = float(len(os.sched_getaffinity(0)))
+    except (AttributeError, OSError):
+        n = float(os.cpu_count() or 1)
+    for path, period_path in (("/sys/fs/cgroup/cpu.max", None),
+                              ("/sys/fs/cgroup/cpu/cpu.cfs_quota_us", "/sys/fs/cgroup/cpu/cpu.cfs_period_us")):
+        try:
+            raw = open(path).read().split()
+            if period_path:
+                raw = [raw[0], open(period_path).read().strip()]
+            if raw[0] not in ("max", "-1") and float(raw[1]) > 0:
+                return min(n, float(raw[0]) / float(raw[1]))
+        except (OSError, ValueError, IndexError):
+            continue
+    return n
+
+
+def auto_workers() -> int:
+    """Search threads when the user leaves it on automatic. Each thread costs memory (about 40 MB on a school
+    of 600 periods), and one thread alone hardly improves on the first solution, so: at least 2, at most 8,
+    otherwise the usable CPUs. GENERATOR_WORKERS overrides it."""
+    env = os.environ.get("GENERATOR_WORKERS", "").strip()
+    if env.isdigit() and int(env) > 0:
+        return min(int(env), 16)
+    return max(2, min(8, int(usable_cpus() + 0.5)))
 
 
 def normalize_params(p: dict | None) -> dict:
@@ -182,10 +214,49 @@ class Problem:
 # ---------------------------------------------------------------------------
 class Built:
     def __init__(self):
-        self.x = {}                # (card index, d, p) -> var
-        self.placed = {}           # card index -> linear expr / var (1 if placed)
+        self.x = {}                # (unit index, d, p) -> var
+        self.units = []            # unit index -> [card index, ...]
+        self.placed = {}           # unit index -> linear expr (number of its cards placed)
         self.assumptions = {}      # literal index -> (kind, payload)
         self.objective_terms = []
+
+
+def make_units(pb: "Problem") -> list[list[int]]:
+    """Cards of one lesson that can go to exactly the same places are interchangeable, so they share one
+    set of variables (x = 1 where one of them starts) instead of one set each. Same rules, a fraction of
+    the variables, and no search over which of the identical cards goes where. Locked cards stay alone."""
+    groups: dict = {}
+    out = []
+    for i, c in enumerate(pb.cards):
+        if c.locked:
+            out.append([i])
+            continue
+        key = (c.lesson.id, c.duration, c.week_no, c.room_id, tuple(c.domain))
+        if key in groups:
+            out[groups[key]].append(i)
+        else:
+            groups[key] = len(out)
+            out.append([i])
+    return out
+
+
+def unit_placement(pb: "Problem", units: list[list[int]], chosen: dict) -> dict:
+    """chosen: unit index -> list of (d, p). Hand the places to the unit's cards, a card keeping its
+    current place when that place was chosen (fewest moved cards)."""
+    placement = {}
+    for u, idxs in enumerate(units):
+        free = list(chosen.get(u, []))
+        rest = []
+        for i in idxs:
+            cur = pb.cards[i].cur
+            if cur is not None and cur in free:
+                placement[i] = cur
+                free.remove(cur)
+            else:
+                rest.append(i)
+        for i, pos in zip(rest, sorted(free)):
+            placement[i] = pos
+    return placement
 
 
 def build_model(pb: Problem, prm: dict, explain: bool = False):
@@ -201,12 +272,15 @@ def build_model(pb: Problem, prm: dict, explain: bool = False):
             b.assumptions[v.Index()] = (kind, payload)
         return lits[key]
 
-    # placement variables
-    for i, c in enumerate(pb.cards):
+    # placement variables: one boolean per unit (cards that are interchangeable) and possible start
+    b.units = make_units(pb)
+    for u, idxs in enumerate(b.units):
+        c = pb.cards[idxs[0]]
+        n = len(idxs)
         vs = []
         for (d, p) in c.domain:
-            v = m.NewBoolVar(f"x{i}_{d}_{p}")
-            b.x[(i, d, p)] = v
+            v = m.NewBoolVar(f"x{u}_{d}_{p}")
+            b.x[(u, d, p)] = v
             vs.append(v)
             for t in c.blocked_by_teacher.get((d, p), []):
                 if explain:
@@ -214,7 +288,7 @@ def build_model(pb: Problem, prm: dict, explain: bool = False):
                 else:
                     m.Add(v == 0)
         placed = sum(vs) if vs else 0
-        b.placed[i] = placed
+        b.placed[u] = placed
         if not vs:
             continue
         if c.locked:
@@ -224,26 +298,28 @@ def build_model(pb: Problem, prm: dict, explain: bool = False):
             else:
                 m.Add(placed == 1)
         elif explain:
-            m.Add(placed <= 1)
+            m.Add(placed <= n)
         elif prm["allow_unplaced"]:
-            m.Add(placed <= 1)
-            b.objective_terms.append((prm["w_unplaced"] * c.duration, 1 - placed))
+            m.Add(placed <= n)
+            b.objective_terms.append((prm["w_unplaced"] * c.duration, n - placed))
         else:
-            m.Add(placed == 1)
+            m.Add(placed == n)
         if explain and not c.locked:
-            m.Add(placed == 1).OnlyEnforceIf(lit(("lesson", c.lesson.id), "lesson", c.lesson.id))
-        # hints: start from where the card is now
-        if c.cur is not None and (i, *c.cur) in b.x:
+            m.Add(placed == n).OnlyEnforceIf(lit(("lesson", c.lesson.id), "lesson", c.lesson.id))
+        # hints: start from where the cards are now
+        now = {pb.cards[i].cur for i in idxs if pb.cards[i].cur is not None}
+        if now & set(c.domain):
             for (d, p) in c.domain:
-                m.AddHint(b.x[(i, d, p)], 1 if (d, p) == c.cur else 0)
-        if pb.mode == "repair" and c.cur is not None and not c.locked and not explain:
-            stay = b.x.get((i, *c.cur))
-            b.objective_terms.append((prm["w_move"], 1 - stay if stay is not None else 1))
+                m.AddHint(b.x[(u, d, p)], 1 if (d, p) in now else 0)
+        if pb.mode == "repair" and now and not c.locked and not explain:
+            stays = [b.x[(u, *pos)] for pos in now if (u, *pos) in b.x]
+            moved = len([i for i in idxs if pb.cards[i].cur is not None])
+            b.objective_terms.append((prm["w_move"], moved - sum(stays)))
 
     # cover[(resource, d, q, w)] -> list of vars occupying it
-    def covering(i, c):
+    def covering(u, c):
         for (d, p) in c.domain:
-            v = b.x[(i, d, p)]
+            v = b.x[(u, d, p)]
             for q in range(p, p + c.duration):
                 yield d, q, v
 
@@ -253,7 +329,8 @@ def build_model(pb: Problem, prm: dict, explain: bool = False):
     section_whole = defaultdict(list)
     section_groups = defaultdict(lambda: defaultdict(list))   # (s, d, q, w) -> group -> vars
     pools = defaultdict(list)       # (frozenset rooms, d, q, w) -> vars
-    for i, c in enumerate(pb.cards):
+    for u, idxs in enumerate(b.units):
+        c = pb.cards[idxs[0]]
         subj = pb.subjects.get(c.lesson.subject_id)
         pool = None
         if not c.room_id and subj is not None and subj.rooms:
@@ -261,7 +338,7 @@ def build_model(pb: Problem, prm: dict, explain: bool = False):
             if allowed and len(allowed) == len(subj.rooms):
                 pool = allowed
         room = pb.rooms.get(c.room_id) if c.room_id else None
-        for d, q, v in covering(i, c):
+        for d, q, v in covering(u, c):
             for w in weeks_of(c):
                 for t in c.teachers:
                     teacher_slots[(t, d, q, w)].append(v)
@@ -429,14 +506,15 @@ def build_model(pb: Problem, prm: dict, explain: bool = False):
     # a lesson's periods spread over different days
     if not explain and prm["w_spread"]:
         by_lesson = defaultdict(list)
-        for i, c in enumerate(pb.cards):
-            by_lesson[c.lesson.id].append(i)
-        for lid, idxs in by_lesson.items():
-            if len(idxs) < 2:
+        for u, idxs in enumerate(b.units):
+            by_lesson[pb.cards[idxs[0]].lesson.id].append(u)
+        for lid, us in by_lesson.items():
+            n = sum(len(b.units[u]) for u in us)
+            if n < 2:
                 continue
-            per_day = -(-len(idxs) // len(pb.days))   # 6 periods in a 5-day week: up to 2 on one day
+            per_day = -(-n // len(pb.days))   # 6 periods in a 5-day week: up to 2 on one day
             for d in range(len(pb.days)):
-                vs = [b.x[(i, dd, p)] for i in idxs for (dd, p) in pb.cards[i].domain if dd == d]
+                vs = [b.x[(u, dd, p)] for u in us for (dd, p) in pb.cards[b.units[u][0]].domain if dd == d]
                 if len(vs) > per_day:
                     extra = m.NewIntVar(0, len(vs), "")
                     m.Add(extra >= sum(vs) - per_day)
@@ -577,8 +655,7 @@ def solve(pb: Problem, prm: dict, on_progress=None, should_stop=None) -> Outcome
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = float(prm["time_limit"])
     solver.parameters.random_seed = int(prm["seed"])
-    if prm["workers"]:
-        solver.parameters.num_workers = int(prm["workers"])
+    solver.parameters.num_workers = int(prm["workers"]) or auto_workers()
 
     class Cb(cp_model.CpSolverSolutionCallback):
         def __init__(self):
@@ -615,10 +692,11 @@ def solve(pb: Problem, prm: dict, on_progress=None, should_stop=None) -> Outcome
         done.set()
     wall = round(time.time() - t0, 1)
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        placement = {}
-        for (i, d, p), v in b.x.items():
+        chosen = defaultdict(list)
+        for (u, d, p), v in b.x.items():
             if solver.Value(v):
-                placement[i] = (d, p)
+                chosen[u].append((d, p))
+        placement = unit_placement(pb, b.units, chosen)
         unplaced = [i for i in range(len(pb.cards)) if i not in placement]
         st = "partial" if unplaced else "solved"
         return Outcome(st, placement, int(solver.ObjectiveValue()), wall, cb.n,
