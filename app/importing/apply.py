@@ -365,6 +365,12 @@ class Importer:
             st = self.i_stage.get(norm(stage))
             grades = [g for g in grades if st and g.stage_id == st.id]
         secs = [x for x in self.sections if x.grade_id in {g.id for g in grades} and sk in (norm(x.name_ar), norm(x.name_en))]
+        if not secs:
+            # '5CPA' or '5 CP A' for section 'CP A' of grade 5 (aSc class names carry the grade)
+            flat = lambda v: norm(v).replace(" ", "")  # noqa: E731
+            want = {flat(s_name)} | {flat(s_name)[len(flat(g.name_ar)):] for g in grades if flat(s_name).startswith(flat(g.name_ar))}
+            secs = [x for x in self.sections if x.grade_id in {g.id for g in grades}
+                    and ({flat(x.name_ar), flat(x.name_en or "")} & want)]
         return secs[0] if len(secs) == 1 else None
 
     def teacher_sections(self):

@@ -2,6 +2,7 @@ import * as api from './api.js';
 import { captureStaticText, lang, setLang, t, onLangChange } from './i18n.js';
 import { state, isAdmin } from './store.js';
 import { h, jumpTo, put, swap, toast, toastError } from './ui.js';
+import { buildNav, drawFavorites, loadNavPrefs, revealRoute } from './nav.js';
 
 const ROUTES = {
   home: () => import('./views/home.js'),
@@ -73,6 +74,7 @@ async function route() {
 
   const [name, ...rest] = path.split('/');
   document.querySelectorAll('#sidebar a').forEach(a => a.classList.toggle('active', a.dataset.route === path || path.startsWith(`${a.dataset.route}/`)));
+  revealRoute(path);
   document.getElementById('sidebar').classList.remove('open');
   const loader = ROUTES[name];
   const token = ++renderToken;
@@ -127,6 +129,7 @@ function trackTopbarHeight() {
 
 async function boot() {
   trackTopbarHeight();
+  buildNav();            // before the static texts are captured, so the menu's new labels are translated too
   captureStaticText();
   setLang(lang);
   document.getElementById('lang-toggle').onclick = () => setLang(lang === 'ar' ? 'en' : 'ar');
@@ -137,13 +140,14 @@ async function boot() {
     if (sb.classList.contains('open') && !sb.contains(e.target) && !e.target.closest('#nav-toggle')) sb.classList.remove('open');
   });
   api.onOfflineChange(off => { document.getElementById('offline-banner').hidden = !off; });
-  onLangChange(async () => { await loadTimetables().catch(() => {}); route(); });
+  onLangChange(async () => { drawFavorites(); await loadTimetables().catch(() => {}); route(); });
 
   try {
     state.me = (await api.get('/auth/me')).user;
   } catch (e) { toastError(e); return; }
   document.getElementById('user-name').textContent = state.me.display_name;
-  if (!isAdmin()) document.querySelectorAll('[data-admin]').forEach(a => a.remove());
+  if (!isAdmin()) document.querySelectorAll('[data-admin]').forEach(a => (a.closest('.nav-item') || a).remove());
+  loadNavPrefs(state.me);
 
   try {
     const school = (await api.get('/api/school')).items[0];

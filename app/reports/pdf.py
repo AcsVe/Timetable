@@ -21,7 +21,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from app.reports.data import Grid, Report, grid_matrix
+from app.reports.data import Grid, Report, TimeLine, grid_matrix
 from app.reports.data import Table as DataTable
 
 FONT_DIR = Path(__file__).resolve().parent / "fonts"
@@ -102,7 +102,8 @@ def rich(text, rtl: bool, bold: bool = False, width: float | None = None, size: 
     for line in str("" if text is None else text).split("\n"):
         logical += _wrap_logical(line, width, size, bold)
     for line in logical:
-        has_ar = any(_is_arabic(ch) for ch in line)
+        # Arabic letters decide the direction; Arabic punctuation alone («،» between Latin names) does not
+        has_ar = any(_is_arabic(ch) and ch not in "،؛؟" for ch in line)
         line = _TIME_RANGE.sub("\\1\u200e\\2\u200e\\3", line)   # «08:00–08:45» stays in reading order inside Arabic
         visual = get_display(_reshaper.reshape(line), base_dir="R" if (rtl and has_ar) else "L").replace("\u200e", "")
         runs, cur, cur_font = [], "", None
@@ -146,19 +147,73 @@ def _fmt(v, percent=False):
     return str(v)
 
 
-def _grid_flowables(rep: Report, g: Grid, st, width, pal: Palette) -> list:
+# Largest text size per print size; the timetable then takes the largest size up to it at which every word
+# fits its column and every row fits its share of the page.
+GRID_FONT = {"normal": 10.0, "large": 13.0, "xlarge": 16.0}
+
+
+def _small(size: float) -> float:
+    return max(size - 1.8, 5.5)
+
+
+def _cell_height(entries, width: float, size: float) -> float | None:
+    """Height of a cell's text at this size, or None when a single word is wider than the column."""
+    total = 0.0
+    for e in entries or []:
+        lines = [x for x in e if x]
+        for i, x in enumerate(lines):
+            first = i == 0 and not isinstance(x, TimeLine)
+            s = size if first else _small(size)
+            for part in str(x).split("\n"):
+                if any(_width(w, s, first) > width for w in part.split(" ") if w):
+                    return None
+                total += len(_wrap_logical(part, width, s, first)) * (s + 3)
+    return total
+
+
+def _fit_size(heads, rows, cw: float, first_w: float, top: float, even: float | None) -> float:
+    size = top
+    while size > 6:
+        ok = all(_cell_height([[x]], cw, size + 0.5) is not None for x in heads)
+        for label, cells, _m in rows:
+            if not ok:
+                break
+            if _cell_height([[label]], first_w - 6, size + 0.5) is None:
+                ok = False
+                break
+            for x in cells:
+                hgt = _cell_height(x, cw, size)
+                if hgt is None or (even and hgt + 8 > even):
+                    ok = False
+                    break
+        if ok:
+            return size
+        size -= 0.5
+    return 6
+
+
+def _grid_flowables(rep: Report, g: Grid, st, width, pal: Palette, avail_h: float | None = None) -> list:
+    """One timetable on its page. The rows share the page height (avail_h), so the table fills the sheet
+    and stays readable when handed out; rep.size makes the text larger still."""
     rtl = rep.rtl
     corner, heads, rows = grid_matrix(g, rep.layout, rtl, raw=True)
     n = len(heads)
-    first_w = (2.4 if rep.layout == "rows" else 2.6) * cm
+    top_size = GRID_FONT.get(rep.size, GRID_FONT["normal"])
+    # the label column (days or period times) only as wide as its text needs, the rest goes to the lessons
+    label_w = max([_width(part, top_size + 0.5, True) for lb, _c, _m in rows for part in str(lb).split("\n")] + [0])
+    first_w = min(max(label_w + 16, 2.0 * cm), 3.6 * cm)
     col = (width - first_w) / max(n, 1)
-    cw = col - 8
-    size = 8 if n <= 7 else 7
-    data = [[Paragraph(rich(corner, rtl, True), st["head"])] +
-            [Paragraph(rich(x, rtl, True, cw, size), st["head"]) for x in heads]]
+    cw = col - 14          # the cell's padding (6 + 6) and a little room
+    head_guess = 2 * (top_size + 4.5) + 8
+    even_guess = (avail_h - head_guess) / max(len(rows), 1) if avail_h else None
+    size = _fit_size(heads, rows, cw, first_w, top_size, even_guess)
+    head_st = ParagraphStyle("gh", parent=st["head"], fontSize=size + 0.5, leading=size + 4)
+    label_st = ParagraphStyle("gl", parent=st["cell"], fontSize=size + 0.5, leading=size + 4)
+    data = [[Paragraph(rich(corner, rtl, True, None, size + 0.5), head_st)] +
+            [Paragraph(rich(x, rtl, True, cw, size + 0.5), head_st) for x in heads]]
     missing_cells = []
     for i, (label, cells, missing) in enumerate(rows, start=1):
-        row = [Paragraph(rich(label, rtl, True), st["cell"])]
+        row = [Paragraph(rich(label, rtl, True, first_w - 6, size + 0.5), label_st)]
         for j, (entries, miss) in enumerate(zip(cells, missing)):
             if miss:
                 missing_cells.append((j + 1, i))
@@ -174,14 +229,17 @@ def _grid_flowables(rep: Report, g: Grid, st, width, pal: Palette) -> list:
         data = [list(reversed(r)) for r in data]
         col_w = list(reversed(col_w))
         missing_cells = [(n - c, r) for c, r in missing_cells]
-    # Days-as-rows pages: give each day row a generous, even height (ASC print style).
-    row_h = None
-    if rep.layout == "rows":
-        even = max(1.6 * cm, min(3.2 * cm, 11 * cm / max(len(rows), 1)))
-        row_h = [None]
-        for _label, cells, _m in rows:
-            lines = max([1] + [sum(len([y for y in e if y]) for e in (x or [])) for x in cells])
-            row_h.append(max(even, (lines + 1) * (size + 3) * 1.15))
+    # The rows share the page height evenly (ASC print style), never less than their text needs.
+    head_lines = max([1] + [str(x).count("\n") + 1 for x in heads])
+    head_h = head_lines * (size + 4.5) + 8
+    if avail_h:
+        even = max(1.2 * cm, (avail_h - head_h) / max(len(rows), 1))
+    else:
+        even = max(1.6 * cm, min(3.2 * cm, 11 * cm / max(len(rows), 1))) if rep.layout == "rows" else 0
+    row_h = [head_h]
+    for _label, cells, _m in rows:
+        need = max([size + 3] + [(_cell_height(x, cw, size) or 0) for x in cells]) + 8
+        row_h.append(max(even, need))
     t = Table(data, colWidths=col_w, rowHeights=row_h, repeatRows=1)
     label_col = n if rtl else 0
     style = [
@@ -209,11 +267,14 @@ def _grid_flowables(rep: Report, g: Grid, st, width, pal: Palette) -> list:
 
 def _cell_markup(entries: list[list[str]], rtl: bool, width: float, size: float, muted: str = "#555555") -> str:
     """One timetable cell: the subject in bold, the teacher (and room) below it in a smaller grey font."""
-    small = max(size - 1.8, 5.5)
+    small = _small(size)
     parts = []
     for e in entries:
         lines = [x for x in e if x]
         if not lines:
+            continue
+        if isinstance(lines[0], TimeLine):     # the period's own time on a day with different times
+            parts.append(f'<font size="{small}" color="{muted}">{rich(lines[0], rtl, False, width, small)}</font>')
             continue
         parts.append(rich(lines[0], rtl, True, width, size))
         for x in lines[1:]:
@@ -324,11 +385,14 @@ def render_pdf(rep: Report, logo: bytes | None) -> bytes:
     _register()
     rtl = rep.rtl
     pal = Palette(rep.style)
-    wide = (bool(rep.grids) or any(len(t.columns) > 5 for t in rep.tables)) and rep.kind != "student-lists"
+    # Timetables with the days as rows are wide (8 period columns): landscape. With the days as columns
+    # (5 columns, 8 period rows) a portrait page is taller and gives every period more room.
+    grid_wide = bool(rep.grids) and (rep.layout == "rows" or len(rep.grids[0].days) > 6)
+    wide = (grid_wide or any(len(t.columns) > 5 for t in rep.tables)) and rep.kind != "student-lists"
     pagesize = landscape(A4) if wide else A4
     st = _styles(rtl, pal)
     buf = io.BytesIO()
-    top = 3.3 * cm
+    top = 3.3 * cm if rep.letterhead else 1.3 * cm
     doc = SimpleDocTemplate(buf, pagesize=pagesize, leftMargin=1.2 * cm, rightMargin=1.2 * cm,
                             topMargin=top, bottomMargin=1.4 * cm, title=rep.title, author=rep.school_name)
     width = pagesize[0] - doc.leftMargin - doc.rightMargin
@@ -343,6 +407,13 @@ def render_pdf(rep: Report, logo: bytes | None) -> bytes:
         canvas.saveState()
         pw, ph = pagesize
         y = ph - 1.1 * cm
+        if not rep.letterhead:      # plain page (e.g. the school's printed letterhead paper): page footer only
+            footer = f"{rep.generated_at}   ·   {'صفحة' if rtl else 'Page'} {canvas.getPageNumber()}"
+            fp = Paragraph(rich(footer, rtl), st["foot"])
+            fp.wrap(pw - doc.leftMargin - doc.rightMargin, 1 * cm)
+            fp.drawOn(canvas, doc.leftMargin, 0.7 * cm)
+            canvas.restoreState()
+            return
         if logo_img:
             iw, ih = logo_img.getSize()
             h = 1.9 * cm
@@ -368,10 +439,13 @@ def render_pdf(rep: Report, logo: bytes | None) -> bytes:
 
     story = []
     sign = _signature_flowable(rep, st, width)
+    frame_h = pagesize[1] - top - doc.bottomMargin - 14      # the frame's own padding
     for i, g in enumerate(rep.grids):
         if i:
             story.append(PageBreak())
-        story += _grid_flowables(rep, g, st, width, pal)
+        # what the table may fill: the page minus its title, subtitle, footer line and signatures
+        reserve = 1.0 * cm + (0.6 * cm if g.subtitle else 0) + (0.8 * cm if g.footer else 0) + (2.4 * cm if sign else 0)
+        story += _grid_flowables(rep, g, st, width, pal, avail_h=frame_h - reserve)
         story += sign
     for i, t in enumerate(rep.tables):
         if i:

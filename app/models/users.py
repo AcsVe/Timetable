@@ -35,6 +35,9 @@ class AppUser(SyncMixin, UserMixin, db.Model):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # personal screen settings that follow the user to every device, e.g.
+    # {"nav": {"favorites": ["reports", "grid"], "collapsed": ["school-data"]}}
+    ui_prefs: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
     stages = relationship("Stage", secondary=user_stage)
     __table_args__ = (
         live_unique("uq_app_user_email_live", "email"),

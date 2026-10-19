@@ -40,14 +40,16 @@ def report(tt_id, kind):
     except ValueError:
         raise ApiError("validation", 400, details={"reason": "invalid filter id"})
     signature = [x.strip()[:60] for x in (request.args.get("signature") or "").split("|") if x.strip()][:6]
+    flag = lambda k: request.args.get(k, "1") not in ("0", "false", "off")  # noqa: E731
     rep = build_report(tt, kind, lang, filters, request.args.get("layout", "rows"),
                        style=request.args.get("style", "plain"), show=parse_show(request.args.get("show")),
-                       signature=signature)
+                       signature=signature, letterhead=flag("header"), logo=flag("logo"),
+                       size=request.args.get("size", "normal"))
     if fmt == "json":
         return jsonify(rep.to_json())
     if fmt not in MIME:
         raise ApiError("validation", 400, details={"field": "format", "reason": "json | xlsx | pdf"})
-    logo = logo_bytes()
+    logo = logo_bytes() if rep.logo else None
     if fmt == "xlsx":
         from app.reports.xlsx import render_xlsx
         data = render_xlsx(rep, logo)
@@ -58,7 +60,9 @@ def report(tt_id, kind):
     resp = Response(data, mimetype=MIME[fmt])
     from urllib.parse import quote
     ascii_name = f"report-{kind}.{fmt}"
-    resp.headers["Content-Disposition"] = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+    # inline: shown in the print preview (the browser's own PDF viewer prints it as is)
+    how = "inline" if request.args.get("disposition") == "inline" and fmt == "pdf" else "attachment"
+    resp.headers["Content-Disposition"] = f"{how}; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
     resp.headers["Cache-Control"] = "no-store"
     return resp
 

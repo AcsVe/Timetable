@@ -3,6 +3,23 @@
 //   captureStaticText()   → remembers the Arabic text of the static page once
 //   setLang('en' | 'ar')  → switches direction + static text, then notifies views to re-render
 const I18N = {
+  'المفضلة': 'Favourites',
+  'إضافة إلى المفضلة': 'Add to favourites',
+  'إزالة من المفضلة': 'Remove from favourites',
+  'معاينة الطباعة': 'Print preview',
+  'تنزيل PDF': 'Download PDF',
+  'إعدادات الطباعة': 'Print settings',
+  'الترويسة': 'Letterhead',
+  'مع الترويسة': 'With letterhead',
+  'بلا ترويسة': 'Without letterhead',
+  'الشعار': 'Logo',
+  'يظهر': 'Shown',
+  'لا يظهر': 'Hidden',
+  'حجم خط الجداول': 'Timetable text size',
+  'عادي': 'Normal',
+  'كبير': 'Large',
+  'كبير جداً': 'Extra large',
+  'كل جدول يملأ صفحة كاملة.': 'Each timetable fills a whole page.',
   '(عدم الاختيار يعني جميع صفوف المرحلة)': '(none selected = every grade in the stage)',
   'أخطاء': 'Errors', 'أضف شعبة أولاً': 'Add a section first',
   'أضف فصلاً دراسياً ومرحلة أولاً': 'Add a term and a stage first',

@@ -56,6 +56,9 @@ export async function render(root) {
   let style = localStorage.getItem('report:style') || 'plain';
   let show = new Set(JSON.parse(localStorage.getItem('report:show') || 'null') || SHOW.map(x => x[0]));
   let signature = localStorage.getItem('report:signature') || '';
+  // printing: letterhead and logo on or off, and how large timetables print (they always fill the page)
+  const printOpts = { header: '1', logo: '1', size: 'normal', ...JSON.parse(localStorage.getItem('report:print') || '{}') };
+  const savePrint = () => localStorage.setItem('report:print', JSON.stringify(printOpts));
   const preview = h('div', { class: 'report-preview' });
   const filterHost = h('div', { class: 'toolbar' });
 
@@ -76,6 +79,7 @@ export async function render(root) {
     const q = new URLSearchParams({ format: fmt, lang: exportLang || lang, layout, style });
     if (GRID_KINDS.has(kind) || MASTER_KINDS.has(kind)) q.set('show', [...show].join(','));
     if (signature.trim()) q.set('signature', signature);
+    if (fmt !== 'json') for (const [k, v] of Object.entries(printOpts)) q.set(k, v);
     for (const k of allowed()) if (filters[k]) q.set(k, filters[k]);
     return `/api/timetables/${tt.id}/reports/${kind}?${q}`;
   };
@@ -133,11 +137,45 @@ export async function render(root) {
     onchange: e => { signature = e.target.value; localStorage.setItem('report:signature', signature); load(); } });
   const exportLang = h('select', { id: 'export-lang', 'aria-label': t('لغة الملف') },
     h('option', { value: 'ar', selected: lang === 'ar' }, 'العربية'), h('option', { value: 'en', selected: lang === 'en' }, 'English'));
+  const offline = () => {
+    if (!api.isOffline()) return false;
+    toastError(new api.ApiError(0, { message: t('لا يوجد اتصال، لا يمكن التصدير الآن'), message_en: 'Offline — cannot export now' }));
+    return true;
+  };
   const download = fmt => {
-    if (api.isOffline()) { toastError(new api.ApiError(0, { message: t('لا يوجد اتصال، لا يمكن التصدير الآن'), message_en: 'Offline — cannot export now' })); return; }
+    if (offline()) return;
     const a = h('a', { href: query(fmt, exportLang.value), download: '' });
     document.body.append(a); a.click(); a.remove();
   };
+  // Print preview: the PDF exactly as it will print (same page, letterhead and size), then print from it.
+  // Phones show PDFs in their own viewer, so there it opens in a new tab.
+  function printPreview() {
+    if (offline()) return;
+    const url = `${query('pdf', exportLang.value)}&disposition=inline`;
+    if (window.matchMedia('(max-width: 760px), (pointer: coarse)').matches) { window.open(url, '_blank'); return; }
+    const frame = h('iframe', { class: 'print-frame', src: url, title: t('معاينة الطباعة') });
+    const dlg = h('dialog', { class: 'print-dialog', id: 'print-preview' },
+      h('div', { class: 'print-bar' },
+        h('b', {}, t('معاينة الطباعة')),
+        h('span', { class: 'grow' }),
+        h('button', { class: 'btn', id: 'print-now', type: 'button', onclick: () => {
+          try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (_) { window.open(url, '_blank'); }
+        } }, t('طباعة')),
+        h('button', { class: 'btn ghost', type: 'button', onclick: () => download('pdf') }, t('تنزيل PDF')),
+        h('button', { class: 'btn ghost', type: 'button', onclick: () => dlg.close() }, t('إغلاق'))),
+      frame);
+    dlg.addEventListener('close', () => dlg.remove());
+    document.body.append(dlg);
+    dlg.showModal();
+  }
+  const opt = (k, label, choices) => h('label', { class: 'inline' }, `${t(label)}:`,
+    h('select', { id: `print-${k}`, 'aria-label': t(label), onchange: e => { printOpts[k] = e.target.value; savePrint(); } },
+      choices.map(([v, l]) => h('option', { value: v, selected: printOpts[k] === v }, t(l)))));
+  const printBox = h('fieldset', { class: 'plain no-print' }, h('legend', {}, t('إعدادات الطباعة')),
+    opt('header', 'الترويسة', [['1', 'مع الترويسة'], ['0', 'بلا ترويسة']]),
+    opt('logo', 'الشعار', [['1', 'يظهر'], ['0', 'لا يظهر']]),
+    opt('size', 'حجم خط الجداول', [['normal', 'عادي'], ['large', 'كبير'], ['xlarge', 'كبير جداً']]),
+    h('span', { class: 'muted small' }, t('كل جدول يملأ صفحة كاملة.')));
 
   put(root,
     h('h1', { class: 'title no-print' }, `${t('التقارير')} — ${tt.name}`),
@@ -149,11 +187,12 @@ export async function render(root) {
     h('div', { class: 'no-print' }, filterHost),
     showHost,
     h('div', { class: 'toolbar no-print' }, h('label', { class: 'inline grow' }, `${t('خانات التوقيع أسفل التقرير')}:`, signInput)),
+    printBox,
     h('div', { class: 'toolbar no-print' },
-      h('button', { class: 'btn', id: 'export-xlsx', onclick: () => download('xlsx') }, t('تصدير Excel')),
-      h('button', { class: 'btn', id: 'export-pdf', onclick: () => download('pdf') }, t('تصدير PDF')),
-      h('label', { class: 'inline' }, `${t('لغة الملف')}:`, exportLang),
-      h('button', { class: 'btn ghost', onclick: () => window.print() }, t('طباعة'))),
+      h('button', { class: 'btn', id: 'print-preview-btn', onclick: printPreview }, t('معاينة الطباعة')),
+      h('button', { class: 'btn ghost', id: 'export-xlsx', onclick: () => download('xlsx') }, t('تصدير Excel')),
+      h('button', { class: 'btn ghost', id: 'export-pdf', onclick: () => download('pdf') }, t('تصدير PDF')),
+      h('label', { class: 'inline' }, `${t('لغة الملف')}:`, exportLang)),
     preview);
   drawFilters();
   await load();
@@ -169,21 +208,23 @@ function renderReport(rep) {
   for (const g of rep.grids) {
     const cells = new Map(g.cells.map(c => [`${c.day}|${c.period}`, c.entries]));
     const missing = new Set(g.missing.map(m => `${m.day}|${m.period}`));
+    // A day whose times differ from the header (a short Tuesday): each cell shows its own time under the teacher.
+    const times = new Map((g.cell_times || []).map(c => [`${c.day}|${c.period}`, c.time]));
     const td = (di, p) => {
       const key = `${di}|${p}`;
       if (missing.has(key)) return h('td', { class: 'none' });
       return h('td', {}, (cells.get(key) || []).map(e => h('div', { class: 'entry' },
-        h('b', {}, e[0]), e.slice(1).filter(Boolean).map(x => h('div', {}, x)))));
+        h('b', {}, e[0]), e.slice(1).filter(Boolean).map(x => h('div', {}, x)))),
+        times.has(key) ? h('div', { class: 'ptime cell-time', dir: 'ltr' }, times.get(key)) : null);
     };
-    const note = di => (g.day_notes && g.day_notes[di] ? h('span', { class: 'ptime', dir: 'ltr' }, g.day_notes[di]) : null);
     const pHead = p => [h('span', { class: 'pnum' }, String(p.no)), p.time ? h('span', { class: 'ptime', dir: 'ltr' }, p.time) : null];
     const table = rep.layout === 'cols'
       ? h('table', { class: 'data report-grid' },
-          h('thead', {}, h('tr', {}, h('th', {}, t('الحصة')), g.days.map((d, di) => h('th', {}, d, note(di))))),
+          h('thead', {}, h('tr', {}, h('th', {}, t('الحصة')), g.days.map(d => h('th', {}, d)))),
           h('tbody', {}, g.periods.map(p => h('tr', {}, h('th', {}, pHead(p)), g.days.map((_, di) => td(di, p.no))))))
       : h('table', { class: 'data report-grid days-rows' },
           h('thead', {}, h('tr', {}, h('th', {}, t('اليوم')), g.periods.map(p => h('th', {}, pHead(p))))),
-          h('tbody', {}, g.days.map((d, di) => h('tr', {}, h('th', { class: 'dayname' }, d, note(di)), g.periods.map(p => td(di, p.no))))));
+          h('tbody', {}, g.days.map((d, di) => h('tr', {}, h('th', { class: 'dayname' }, d), g.periods.map(p => td(di, p.no))))));
     blocks.push(h('section', { class: 'report-block', id: blockId(g.title) }, h('h3', {}, g.title),
       g.subtitle ? h('div', { class: 'muted' }, g.subtitle) : null,
       h('div', { class: 'grid-scroll' }, table),
@@ -196,7 +237,8 @@ function renderReport(rep) {
     const fmt = (v, j) => (v == null ? '' : tb.percent.includes(j) ? `${Math.round(v * 100)}%` : String(v));
     const rows = tb.rows.map((r, i) => h('tr', { class: groupStarts.has(i) && i ? 'group-start' : null }, r.map((v, j) => {
       const c = colors.get(`${i}|${j}`);
-      return h('td', { class: numeric.has(j) ? 'num' : '', style: c ? { '--c': c } : null, dataset: c ? { tint: '1' } : {} }, fmt(v, j));
+      // dir=auto: «5 / CP A» or an English name reads left to right, «السابع / أ» right to left
+      return h('td', { class: numeric.has(j) ? 'num' : '', dir: 'auto', style: c ? { '--c': c } : null, dataset: c ? { tint: '1' } : {} }, fmt(v, j));
     })));
     if (tb.totals) rows.push(h('tr', { class: 'total' }, tb.totals.map((v, j) => h('td', { class: numeric.has(j) ? 'num' : '' }, fmt(v, j)))));
     const thead = h('thead', {},

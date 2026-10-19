@@ -143,3 +143,54 @@ def test_deleting_a_class_teacher_is_blocked(rep):
     t = a.ok("get", f"/api/teachers/{rep['t_pe_m']}")
     r = a.delete(f"/api/teachers/{t['id']}?version={t['version']}")
     assert r.status_code == 409 and "section" in r.get_json()["details"]
+
+
+def test_print_settings_letterhead_logo_size_and_preview(rep, monkeypatch):
+    """Without the letterhead (or the logo) the page carries neither; larger sizes print larger text on one
+    page per timetable; disposition=inline lets the browser show the PDF in the print preview."""
+    import re
+    from app.reports import pdf as P
+    a = rep["api"]
+    drawn = []
+    real_rich = P.rich
+    monkeypatch.setattr(P, "rich", lambda text, *x, **k: (drawn.append(str(text)), real_rich(text, *x, **k))[1])
+
+    def pdf(**q):
+        drawn.clear()
+        r = a.get(url(rep, "section-timetable", format="pdf", section_id=rep["s5a"], **q))
+        assert r.status_code == 200 and r.data[:4] == b"%PDF"
+        return r
+
+    images = lambda r: len(re.findall(rb"/Subtype\s*/Image", r.data))  # noqa: E731
+    pages = lambda r: len(re.findall(rb"/Type\s*/Page[^s]", r.data))  # noqa: E731
+    full = pdf()
+    assert "مدرسة الاختبار" in drawn and images(full) == 1
+    bare = pdf(header="0")
+    assert "مدرسة الاختبار" not in drawn and images(bare) == 0
+    nologo = pdf(logo="0")
+    assert "مدرسة الاختبار" in drawn and images(nologo) == 0
+    assert full.headers["Content-Disposition"].startswith("attachment")
+    assert pdf(disposition="inline").headers["Content-Disposition"].startswith("inline")
+    for size in ("large", "xlarge"):
+        assert pages(pdf(size=size, header="0", lang="en")) == 1
+    # Excel: no letterhead rows when asked
+    from openpyxl import load_workbook as lw
+    x = a.get(url(rep, "section-timetable", format="xlsx", section_id=rep["s5a"], header="0", size="large"))
+    ws = lw(io.BytesIO(x.data)).worksheets[0]
+    assert ws["A1"].value is None and not ws._images
+
+
+def test_grid_fills_the_page_and_text_fits_its_columns():
+    """The timetable takes the largest text size at which no word is cut and every row fits the page."""
+    from app.reports.data import Grid
+    from app.reports.pdf import _cell_height, _fit_size, _register, _width
+    _register()
+    heads = [f"{p}\n08:00–08:45" for p in range(1, 9)]
+    cells = [[[["Computer Programming", "Yara Mardini"]] for _ in range(8)] for _ in range(5)]
+    rows = [(d, c, [False] * 8) for d, c in zip(["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"], cells)]
+    small = _fit_size(heads, rows, 60, 60, 16, 80)
+    wide = _fit_size(heads, rows, 140, 60, 16, 80)
+    assert 6 <= small < wide <= 16
+    assert _width("Programming", wide, True) <= 140 and _cell_height(cells[0][0], 140, wide) + 8 <= 80
+    assert _cell_height([["Programming"]], 20, 10) is None            # a word wider than the column
+    assert Grid(title="", days=[], periods=[]).cell_times == {}

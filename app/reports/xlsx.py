@@ -9,7 +9,7 @@ from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from app.reports.data import Grid, Report, Table, grid_matrix
+from app.reports.data import Grid, Report, Table, TimeLine, grid_matrix
 
 THIN = Side(style="thin", color="B8C2D0")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -64,9 +64,11 @@ def _header(ws, rep: Report, sub_title: str, width_cols: int, logo: bytes | None
     font = "Arial"
     first = 2 if logo else 1
     last = max(width_cols, first + 2)
-    for row, text, size, bold in ((1, rep.school_name, 14, True), (2, rep.title, 13, True),
-                                  (3, sub_title, 11, True),
-                                  (4, " — ".join(x for x in (rep.timetable_name, rep.filters, rep.generated_at) if x), 9, False)):
+    lines = ((1, rep.school_name, 14, True), (2, rep.title, 13, True), (3, sub_title, 11, True),
+             (4, " — ".join(x for x in (rep.timetable_name, rep.filters, rep.generated_at) if x), 9, False))
+    if not rep.letterhead:      # without the letterhead only the table's own title stays
+        lines = tuple(x for x in lines if x[0] == 3)
+    for row, text, size, bold in lines:
         ws.merge_cells(start_row=row, start_column=first, end_row=row, end_column=last)
         c = ws.cell(row=row, column=first, value=text)
         c.font = Font(name=font, size=size, bold=bold, color=look.title_color if row < 3 else ("000000" if look.plain else "333333"))
@@ -88,12 +90,15 @@ def _header(ws, rep: Report, sub_title: str, width_cols: int, logo: bytes | None
     ws.print_title_rows = f"{HEADER_ROWS + 1}:{HEADER_ROWS + 1}"
 
 
-def _rich_cell(entries, muted="555555"):
+SIZE_SCALE = {"normal": 1.0, "large": 1.35, "xlarge": 1.7}
+
+
+def _rich_cell(entries, muted="555555", scale: float = 1.0):
     """Subject in bold, teacher/room under it in a smaller grey font (Excel rich text)."""
     from openpyxl.cell.rich_text import CellRichText, TextBlock
     from openpyxl.cell.text import InlineFont
-    bold = InlineFont(rFont="Arial", b=True, sz=10)
-    small = InlineFont(rFont="Arial", sz=8, color=muted)
+    bold = InlineFont(rFont="Arial", b=True, sz=round(10 * scale))
+    small = InlineFont(rFont="Arial", sz=round(8 * scale), color=muted)
     parts = []
     for e in entries:
         lines = [x for x in e if x]
@@ -101,6 +106,9 @@ def _rich_cell(entries, muted="555555"):
             continue
         if parts:
             parts.append(TextBlock(small, "\n"))
+        if isinstance(lines[0], TimeLine):     # the period's own time on a day with different times
+            parts.append(TextBlock(small, lines[0]))
+            continue
         parts.append(TextBlock(bold, lines[0]))
         for x in lines[1:]:
             parts.append(TextBlock(small, "\n" + x))
@@ -110,6 +118,7 @@ def _rich_cell(entries, muted="555555"):
 def _write_grid(ws, rep: Report, g: Grid, logo):
     look = Look(rep.style)
     corner, heads, rows = grid_matrix(g, rep.layout, rep.rtl, raw=True)
+    k = SIZE_SCALE.get(rep.size, 1.0)
     _header(ws, rep, g.title + (f" — {g.subtitle}" if g.subtitle else ""), len(heads) + 1, logo, look)
     r0 = HEADER_ROWS + 1
     for j, text in enumerate([corner] + heads, start=1):
@@ -119,7 +128,7 @@ def _write_grid(ws, rep: Report, g: Grid, logo):
     for i, (label, cells, missing) in enumerate(rows, start=1):
         row = r0 + i
         c = ws.cell(row=row, column=1, value=label)
-        c.font, c.fill, c.alignment, c.border = Font(name="Arial", bold=True), look.sub_fill, CENTER, look.border
+        c.font, c.fill, c.alignment, c.border = Font(name="Arial", bold=True, size=round(10 * k)), look.sub_fill, CENTER, look.border
         max_lines = 2
         for j, (text, miss) in enumerate(zip(cells, missing), start=2):
             cell = ws.cell(row=row, column=j)
@@ -130,14 +139,14 @@ def _write_grid(ws, rep: Report, g: Grid, logo):
                 else:
                     cell.fill = look.missing_fill
                 continue
-            cell.font = Font(name="Arial", size=9)
+            cell.font = Font(name="Arial", size=round(9 * k))
             if text:
-                cell.value = _rich_cell(text, look.muted)
+                cell.value = _rich_cell(text, look.muted, k)
                 max_lines = max(max_lines, sum(len([x for x in e if x]) for e in text))
-        ws.row_dimensions[row].height = 15 * max_lines
-    ws.column_dimensions["A"].width = max(ws.column_dimensions["A"].width or 0, 13)
+        ws.row_dimensions[row].height = 15 * k * max_lines
+    ws.column_dimensions["A"].width = max(ws.column_dimensions["A"].width or 0, 13 * k)
     for j in range(len(heads)):
-        ws.column_dimensions[get_column_letter(j + 2)].width = 16 if rep.layout == "rows" else 24
+        ws.column_dimensions[get_column_letter(j + 2)].width = (16 if rep.layout == "rows" else 24) * k
     end = r0 + len(rows) + 2
     if g.footer:
         ws.cell(row=end, column=1, value=g.footer).font = Font(name="Arial", italic=True)

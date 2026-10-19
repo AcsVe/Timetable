@@ -102,7 +102,7 @@ def test_asc_import_builds_structure_and_places_cards(base, ctx):
     assert rep["cards"] == {"placed": 6, "unplaced": 0}   # L1: 3 singles, L2/L3: one double each, L4: 1
     # grades: 'السابع' from the grades list, '8' split from the class name '8A'
     assert sorted(g.name_ar for g in ctx.query(Grade)) == ["8", "السابع"]
-    assert {s.name_ar for s in ctx.query(Section)} == {"7أ", "7ب", "8A"}
+    assert {s.name_ar for s in ctx.query(Section)} == {"7أ", "7ب", "A"}      # 8A → grade 8, section A
     assert [st.name_ar for st in ctx.query(Stage)] == ["المرحلة الأساسية"]
     div = ctx.query(Division).one()
     assert sorted(g.name_ar for g in ctx.query(StudentGroup).filter_by(division_id=div.id)) == ["بنات", "بنين"]
@@ -280,10 +280,21 @@ def test_start_over_with_asc_and_bell_sheet_together(base, ctx):
     assert rep["cards"]["unplaced"] == 0
     # printable section timetable: subject + teacher, Tuesday shows its own times
     tt = rep["timetable"]["id"]
-    sec = ctx.query(Section).filter_by(name_ar="7أ").one()
+    sec = ctx.query(Section).filter_by(name_ar="أ", grade_id=g7.id).one()      # '7أ' → grade 7, section أ
     j = base.ok("get", f"/api/timetables/{tt}/reports/section-timetable?section_id={sec.id}")
     g = j["grids"][0]
-    assert g["day_notes"][2] == "08:00–13:20" and g["day_notes"][0] is None
+    # Tuesday's own times go into its cells (under the subject and teacher), not under the day name
+    tue_times = {c["period"]: c["time"] for c in g["cell_times"] if c["day"] == 2}
+    assert tue_times[1] == "08:00–08:35" and tue_times[8] == "12:35–13:20"
+    assert not any(c["day"] != 2 for c in g["cell_times"])
+    from app.reports.data import grid_matrix, TimeLine
+    from app.reports.data import Grid
+    gm = Grid(title="", days=g["days"], periods=[(p["no"], p["time"]) for p in g["periods"]],
+              cells={(c["day"], c["period"]): c["entries"] for c in g["cells"]},
+              cell_times={(c["day"], c["period"]): c["time"] for c in g["cell_times"]})
+    _c, heads, rows = grid_matrix(gm, "rows", True, raw=True)
+    tue = rows[2][1][0]
+    assert isinstance(tue[-1][0], TimeLine) and tue[-1][0] == "08:00–08:35" and rows[2][0] == "الثلاثاء"
     assert any(c["entries"][0][1] for c in g["cells"])
     pdf = base.get(f"/api/timetables/{tt}/reports/section-timetable?section_id={sec.id}&format=pdf")
     assert pdf.status_code == 200 and pdf.data[:4] == b"%PDF"
@@ -367,3 +378,15 @@ def test_asc_week_a_b_lessons_still_warn():
     xml = xml.replace('teacherids="T1" daysdefid="*1" weeksdefid="*1"/>', 'teacherids="T1" daysdefid="*1" weeksdefid="*A"/>', 1)
     b = parse_asc(xml.encode())
     assert any("متعدد الأسابيع" in w.message for w in b.warnings)
+
+
+def test_asc_class_names_split_into_grade_and_section():
+    """The school's classes: 5A, 5B, 5CPA, 5CPB → grade 5 with sections A, B, CP A, CP B (one grade, so the
+    grade's bell times and study plan apply to the CP sections too)."""
+    from app.importing.asc import parse_asc, section_part
+    assert [section_part(x) for x in ("A", "CPA", "CS A", " IGSCI A", "B:Bus", "")] == ["A", "CP A", "CS A", "IGSCI A", "B:Bus", ""]
+    xml = ASC_XML.replace('<class id="C3" name="8A" short="8A"/>',
+                          '<class id="C3" name="5A" short="5A"/><class id="C4" name="5CPA" short="5CPA"/>'
+                          '<class id="C5" name="10 IGSCI A" short="10"/>')
+    secs = {(s["grade"], s["name"]) for s in parse_asc(xml.encode()).sections}
+    assert {("5", "A"), ("5", "CP A"), ("10", "IGSCI A")} <= secs

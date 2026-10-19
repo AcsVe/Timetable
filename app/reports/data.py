@@ -81,7 +81,13 @@ class Grid:
     missing: set = field(default_factory=set)        # (day_idx, period_no) that don't exist that day
     footer: str | None = None
     subtitle: str | None = None
-    day_notes: list = field(default_factory=list)    # per day: own times when they differ from the header
+    # (day_idx, period_no) -> "08:35–09:10" on a day whose times differ from the header row (a short Tuesday):
+    # printed in the cell under the subject and teacher, so every period of that day carries its own time
+    cell_times: dict = field(default_factory=dict)
+
+
+class TimeLine(str):
+    """A cell's own time (see Grid.cell_times): renderers print it small, left-to-right, after the entries."""
 
 
 def grid_matrix(g: "Grid", layout: str, rtl: bool, raw: bool = False):
@@ -90,18 +96,25 @@ def grid_matrix(g: "Grid", layout: str, rtl: bool, raw: bool = False):
     period_label = lambda p, tl: f"{p}\n{tl}" if tl else str(p)  # noqa: E731
     if raw:   # entries kept separate so the renderer can style the subject line and the teacher line apart
         text = lambda d, p: g.cells.get((d, p)) or None  # noqa: E731
+        if g.cell_times:
+            plain = text
+            text = lambda d, p: ((plain(d, p) or []) + [[TimeLine(g.cell_times[(d, p)])]]  # noqa: E731
+                                 if (d, p) in g.cell_times else plain(d, p))
     else:
-        text = lambda d, p: "\n".join("\n".join(x for x in e if x) for e in g.cells.get((d, p), [])) or None  # noqa: E731
-    note = lambda d: g.day_notes[d] if d < len(g.day_notes) and g.day_notes[d] else None  # noqa: E731
+        def text(d, p):
+            lines = ["\n".join(x for x in e if x) for e in g.cells.get((d, p), [])]
+            if (d, p) in g.cell_times:
+                lines.append(g.cell_times[(d, p)])
+            return "\n".join(x for x in lines if x) or None
     if layout == "cols":
         corner = "الحصة" if rtl else "Period"
-        heads = [f"{day}\n{note(d)}" if note(d) else day for d, day in enumerate(g.days)]
+        heads = list(g.days)
         rows = [(period_label(p, tl), [text(d, p) for d in range(len(g.days))],
                  [(d, p) in g.missing for d in range(len(g.days))]) for p, tl in g.periods]
     else:
         corner = "اليوم" if rtl else "Day"
         heads = [period_label(p, tl) for p, tl in g.periods]
-        rows = [(f"{day}\n{note(d)}" if note(d) else day, [text(d, p) for p, _ in g.periods],
+        rows = [(day, [text(d, p) for p, _ in g.periods],
                  [(d, p) in g.missing for p, _ in g.periods]) for d, day in enumerate(g.days)]
     return corner, heads, rows
 
@@ -155,6 +168,9 @@ class Report:
     signature: list = field(default_factory=list)   # signature boxes printed under every page's content
     notes: list = field(default_factory=list)       # lines printed after the tables
     orientable: bool = False                        # the screen may offer to turn this report on its side
+    letterhead: bool = True                         # school name, report title and filters at the top of each page
+    logo: bool = True                               # the school logo in the letterhead
+    size: str = "normal"                            # timetables fill the page; "large" / "xlarge" for handing out
 
     @property
     def rtl(self) -> bool:
@@ -170,7 +186,8 @@ class Report:
                 "title": g.title, "days": g.days, "periods": [{"no": n, "time": t} for n, t in g.periods],
                 "cells": [{"day": d, "period": p, "entries": v} for (d, p), v in sorted(g.cells.items())],
                 "missing": [{"day": d, "period": p} for d, p in sorted(g.missing)], "footer": g.footer,
-                "subtitle": g.subtitle, "day_notes": g.day_notes,
+                "subtitle": g.subtitle,
+                "cell_times": [{"day": d, "period": p, "time": v} for (d, p), v in sorted(g.cell_times.items())],
             } for g in self.grids],
             "tables": [{"title": t.title, "columns": t.columns, "rows": t.rows, "numeric": sorted(t.numeric),
                         "percent": sorted(t.percent), "totals": t.totals,
@@ -335,7 +352,6 @@ class Ctx:
 def _grid_for(ctx: Ctx, title: str, cards: list[Card], entry, grade_ids: list | None) -> Grid:
     day_names = [ctx.name(d) for d in ctx.days]
     per_day: list[dict[int, str | None]] = []
-    spans: list[str | None] = []
     grades = [ctx.grades[g] for g in grade_ids] if grade_ids else list(ctx.grades.values())
     for d in ctx.days:
         slots: dict[int, str | None] = {}
@@ -348,11 +364,6 @@ def _grid_for(ctx: Ctx, title: str, cards: list[Card], entry, grade_ids: list | 
                 for s in sched.slots:
                     if s.kind == "lesson":
                         slots[s.period_no] = f"{s.starts_at.strftime('%H:%M')}–{s.ends_at.strftime('%H:%M')}"
-                lessons_ = [s for s in sched.slots if s.kind == "lesson"]
-                spans.append(f"{lessons_[0].starts_at.strftime('%H:%M')}–{lessons_[-1].ends_at.strftime('%H:%M')}"
-                             if lessons_ else None)
-            else:
-                spans.append(None)
         per_day.append(slots)
     all_p = sorted({p for d in per_day for p in d})
     periods = []
@@ -360,11 +371,11 @@ def _grid_for(ctx: Ctx, title: str, cards: list[Card], entry, grade_ids: list | 
         times = [d[p] for d in per_day if d.get(p)]
         periods.append((p, max(set(times), key=times.count) if times else None))
     grid = Grid(title=title, days=day_names, periods=periods)
-    # A day whose times differ from the header (e.g. a short Tuesday) shows its own start–end.
-    if spans:
-        header = {p: tl for p, tl in periods}
-        grid.day_notes = [spans[i] if any(d.get(p) and d.get(p) != header.get(p) for p in d) else None
-                          for i, d in enumerate(per_day)]
+    # A day whose times differ from the header (e.g. a short Tuesday): each of its periods carries its own time.
+    header = {p: tl for p, tl in periods}
+    for di, d in enumerate(per_day):
+        if any(tl and tl != header.get(p) for p, tl in d.items()):
+            grid.cell_times.update({(di, p): tl for p, tl in d.items() if tl})
     for di, d in enumerate(per_day):
         for p in all_p:
             if p not in d:
@@ -382,7 +393,7 @@ def _grid_for(ctx: Ctx, title: str, cards: list[Card], entry, grade_ids: list | 
     grid.footer = ctx.L(f"مجموع الحصص: {total}", f"Total periods: {total}")
     if "times" not in ctx.show:
         grid.periods = [(p, None) for p, _t in grid.periods]
-        grid.day_notes = []
+        grid.cell_times = {}
     return grid
 
 
@@ -759,7 +770,7 @@ def free_teacher_grid(ctx: Ctx) -> list[Grid]:
         keep = [i for i, d in enumerate(ctx.days) if d.id == day_only]
         grid.days = [grid.days[i] for i in keep]
         grid.missing = {(keep.index(di), p) for di, p in grid.missing if di in keep}
-        grid.day_notes = [grid.day_notes[i] for i in keep] if grid.day_notes else []
+        grid.cell_times = {(keep.index(di), p): v for (di, p), v in grid.cell_times.items() if di in keep}
         days = [ctx.days[i] for i in keep]
     else:
         days = ctx.days
@@ -1293,8 +1304,12 @@ def plan_teachers(ctx: Ctx) -> Table:
                  totals=[ctx.L("المجموع", "Total")] + [sum((r[i] or 0) for r in rows) for i in range(1, 9)] + [""])
 
 
+PRINT_SIZES = ("normal", "large", "xlarge")
+
+
 def build_report(tt: Timetable, kind: str, lang: str, filters: dict, layout: str = "rows", style: str = "plain",
-                 show: set | None = None, signature: list | None = None) -> Report:
+                 show: set | None = None, signature: list | None = None, letterhead: bool = True, logo: bool = True,
+                 size: str = "normal") -> Report:
     ctx = Ctx(tt, lang, filters, show)
     school = db.session.scalars(select(School)).first()
     rep = Report(
@@ -1303,6 +1318,7 @@ def build_report(tt: Timetable, kind: str, lang: str, filters: dict, layout: str
         timetable_name=tt.name, filters=ctx.describe_filters(), layout=layout if layout in ("rows", "cols") else "rows",
         generated_at=datetime.now(ZoneInfo(os.environ.get("APP_TIMEZONE", "Asia/Amman"))).strftime("%Y-%m-%d %H:%M"),
         style=style if style in ("plain", "color") else "plain", signature=[x for x in (signature or []) if x],
+        letterhead=letterhead, logo=logo and letterhead, size=size if size in PRINT_SIZES else "normal",
     )
     rep.orientable = kind.endswith("-timetable") or kind in ("teachers-master", "free-teachers") or kind in MATRIX_KINDS
     if kind == "teacher-timetable":

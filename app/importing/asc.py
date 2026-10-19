@@ -174,6 +174,14 @@ def split_class_name(name: str) -> tuple[str, str] | None:
     return grade, m.group("sec")
 
 
+def section_part(rest: str) -> str:
+    """What follows the grade number in an aSc class name, as a section name: 'A' → 'A',
+    'CPA' → 'CP A' (a stream letter code and the section letter), 'CS A' and 'B:Bus' unchanged."""
+    rest = rest.strip(" -/.")
+    m = re.fullmatch(r"([A-Z]{2,})([A-Z])", rest)
+    return f"{m.group(1)} {m.group(2)}" if m else rest
+
+
 def parse_asc(data: bytes, filename: str = "") -> Bundle:
     xml = fix_encoding(extract_xml(data, filename))
     if len(xml) > MAX_XML:
@@ -260,8 +268,9 @@ def parse_asc(data: bytes, filename: str = "") -> Bundle:
         grade, sec = grade_names.get(grade_ref) or None, n
         if not grade:
             lead = re.match(r"^\s*(\d{1,2})(?!\d)", n)
-            if lead:                       # '7CS A', '10 IGSCI A', '12B:Bus' → grade 7 / 10 / 12, section = class name
+            if lead:                       # '5A' → 5 / A, '5CPA' → 5 / CP A, '10 IGSCI A' → 10 / IGSCI A
                 grade = lead.group(1)
+                sec = section_part(n[lead.end():]) or n
             else:
                 split = split_class_name(n)
                 grade, sec = split if split else (n, n)

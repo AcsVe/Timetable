@@ -71,6 +71,7 @@ def serialize_me(user: AppUser) -> dict:
         "preferred_lang": user.preferred_lang,
         "stage_ids": sorted(str(s) for s in user.stage_ids),
         "valid_until": user.valid_until.isoformat() if user.valid_until else None,
+        "ui_prefs": user.ui_prefs or {},
     }
 
 
@@ -78,3 +79,36 @@ def serialize_me(user: AppUser) -> dict:
 @login_required
 def me():
     return jsonify(user=serialize_me(current_user))
+
+
+def _clean_nav(v) -> dict:
+    """{"favorites": [route, …], "collapsed": [group, …]}: short strings only, no duplicates, bounded."""
+    if not isinstance(v, dict):
+        raise ApiError("validation", 400, details={"field": "nav"})
+    out = {}
+    for key, limit in (("favorites", 40), ("collapsed", 20)):
+        items = v.get(key, [])
+        if not isinstance(items, list) or not all(isinstance(x, str) and 0 < len(x) <= 80 for x in items):
+            raise ApiError("validation", 400, details={"field": f"nav.{key}"})
+        out[key] = list(dict.fromkeys(items))[:limit]
+    return out
+
+
+@auth_bp.put("/me/prefs")
+@login_required
+def save_prefs():
+    """Personal screen settings (the side menu's favourites and collapsed groups). Saving the same value
+    twice changes nothing, so no Idempotency-Key is needed; written with a plain UPDATE so a click on a
+    menu group neither bumps the account's version nor fills the audit log."""
+    from sqlalchemy import update
+    data = request.get_json(silent=True) or {}
+    prefs = dict(current_user.ui_prefs or {})
+    if "nav" in data:
+        try:
+            prefs["nav"] = _clean_nav(data["nav"])
+        except ApiError as e:       # this blueprint has no API error handler of its own
+            return e.response()
+    table = AppUser.__table__
+    db.session.execute(update(table).where(table.c.id == current_user.id).values(ui_prefs=prefs))
+    db.session.commit()
+    return jsonify(ui_prefs=prefs)
