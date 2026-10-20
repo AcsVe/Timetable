@@ -1,4 +1,6 @@
-"""user ui prefs (favourites and collapsed groups of the side menu); audit foreign keys that the
+"""user ui prefs
+
+The side menu's favourites and folded groups (app_user.ui_prefs), and the audit foreign keys that the
 holidays/plans migration left out. generator_run's are skipped on purpose (autogenerate repeats them).
 
 Revision ID: 9df23ede9717

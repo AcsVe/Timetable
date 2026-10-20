@@ -72,10 +72,21 @@ def count_word(n: int) -> str:
     return count(n, "period")
 
 
+def solver_available() -> bool:
+    import importlib.util
+    return importlib.util.find_spec("ortools") is not None
+
+
 @api_bp.post("/timetables/<tt_id>/generator/runs")
 @write_endpoint
 def start_generator(tt_id):
     require_admin(current_user)
+    if not solver_available():     # e.g. the phone standby (Termux): OR-Tools has no Android build
+        raise ApiError("validation", 503, details={"reason": "solver_unavailable"},
+                       message="المولّد التلقائي غير متاح على هذا الجهاز (تشغيل الطوارئ من الهاتف). "
+                               "بقية النظام يعمل، ويعود المولّد عند إرجاع النظام إلى الكمبيوتر",
+                       message_en="The automatic generator is not available on this device (phone emergency mode). "
+                                  "Everything else works; the generator is back when the system returns to the PC")
     tt = _tt(tt_id)
     data = request.get_json(silent=True) or {}
     mode = data.get("mode") or "full"

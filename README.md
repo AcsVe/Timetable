@@ -4,6 +4,12 @@ Flask + SQLAlchemy + Postgres (Neon) · واجهة عربية RTL مع الإن�
 
 مخطط قاعدة البيانات المعتمد: [`docs/ERD.md`](docs/ERD.md).
 
+
+## التشغيل على كمبيوتر المدرسة (4.iajaward.org) والهاتف احتياطاً
+بنفس طريقة الأنظمة الأخرى (التذاكر 1، القاعات 2، الحضور 3): الكمبيوتر يشغّل النظام بخادم Waitress على المنفذ 8004
+وقاعدة PostgreSQL محلية، وCloudflare Tunnel ينشره على `https://4.iajaward.org`، ونسخة كل ساعة إلى Google Drive
+(وNeon اختيارياً)، والهاتف (Termux) يتولّى عند انقطاع الكمبيوتر. التفاصيل: [SERVER_AR.md](SERVER_AR.md) و[SYSTEM_GUIDE_AR.md](SYSTEM_GUIDE_AR.md).
+
 ## الحالة: المرحلة 1 — الخادم والكيانات الأساسية ✅
 
 | الجزء | ما تم |

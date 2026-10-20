@@ -16,7 +16,6 @@ from functools import wraps
 
 from flask import current_app, g, jsonify, request
 from flask_login import current_user, login_required
-from psycopg import errors as pgerr
 from sqlalchemy.exc import IntegrityError
 
 from app.errors import ApiError
@@ -25,14 +24,26 @@ from app.models import IdempotencyKey
 from app.models.base import utcnow
 
 
+EXCLUSION, UNIQUE, FOREIGN_KEY = "23P01", "23505", "23503"     # PostgreSQL SQLSTATE codes
+
+
+def pg_error(orig) -> tuple[str, str]:
+    """(SQLSTATE, constraint name) from the driver's exception: psycopg on the PC and on Render, pg8000 on
+    the phone standby (Termux), where psycopg cannot load libpq."""
+    code = getattr(orig, "sqlstate", None)
+    name = getattr(getattr(orig, "diag", None), "constraint_name", None)
+    if code is None and orig is not None and orig.args and isinstance(orig.args[0], dict):   # pg8000
+        code, name = orig.args[0].get("C"), orig.args[0].get("n")
+    return code or "", name or ""
+
+
 def integrity_to_api_error(exc: IntegrityError) -> ApiError:
-    orig = exc.orig
-    name = getattr(getattr(orig, "diag", None), "constraint_name", None) or ""
-    if isinstance(orig, pgerr.ExclusionViolation) or name == "ex_occupancy_no_overlap":
+    code, name = pg_error(exc.orig)
+    if code == EXCLUSION or name == "ex_occupancy_no_overlap":
         return ApiError("placement_conflict", 409, details=[{"code": "db_guard", "constraint": name}])
-    if isinstance(orig, pgerr.UniqueViolation):
+    if code == UNIQUE:
         return ApiError("duplicate", 409, details={"constraint": name})
-    if isinstance(orig, pgerr.ForeignKeyViolation):
+    if code == FOREIGN_KEY:
         return ApiError("validation", 400, details={"constraint": name, "reason": "unknown_reference"})
     return ApiError("integrity", 400, details={"constraint": name})
 
@@ -99,7 +110,7 @@ def write_endpoint(fn):
             db.session.commit()
         except IntegrityError as e:
             db.session.rollback()
-            if isinstance(e.orig, pgerr.UniqueViolation) and "idempotency_key" in str(e.orig):
+            if pg_error(e.orig)[0] == UNIQUE and "idempotency_key" in str(e.orig):
                 return ApiError("idempotency_in_progress", 409).response()
             err = integrity_to_api_error(e)
             return err.response()

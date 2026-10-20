@@ -16,3 +16,6 @@ Pillow==12.2.0
 Flask-Compress==1.25
 cryptography==46.0.3
 ortools==9.15.6755
+waitress==3.0.2
+requests==2.32.5
+pg8000==1.31.5

@@ -7,3 +7,7 @@ venv/
 *.sqlite
 instance/
 secrets.yaml
+data/
+logs/
+backups/
+pyexe.txt
