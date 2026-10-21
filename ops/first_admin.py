@@ -26,11 +26,21 @@ def main():
         print(t(f'  ✓ يوجد مدير نظام في القاعدة ({admins})', f'  ✓ An admin account exists ({admins})'))
         return
     print(t('\n  إنشاء حساب مدير النظام', '\n  Create the admin account'))
-    email = input(t('  البريد الإلكتروني: ', '  Email: ')).strip()
-    pw = getpass.getpass(t('  كلمة المرور (8 أحرف على الأقل، لا تظهر أثناء الكتابة): ', '  Password (8+ characters, hidden): '))
-    if not email or len(pw) < 8:
-        print(t('  ✖ البريد أو كلمة المرور غير صالحين — أعد التشغيل: venv\\Scripts\\python ops\\first_admin.py',
-                '  ✖ Invalid email or password - run again: venv\\Scripts\\python ops\\first_admin.py'))
+    email = ''
+    for _ in range(3):                       # an extra Enter (e.g. after pasting the command) must not abort
+        email = input(t('  البريد الإلكتروني: ', '  Email: ')).strip()
+        if '@' in email:
+            break
+        print(t('  اكتب البريد ثم Enter', '  Type the email, then Enter'))
+    pw = ''
+    for _ in range(3):
+        pw = getpass.getpass(t('  كلمة المرور (8 أحرف على الأقل، لا تظهر أثناء الكتابة): ', '  Password (8+ characters, hidden): '))
+        if len(pw) >= 8:
+            break
+        print(t('  كلمة المرور أقصر من 8 أحرف', '  The password is shorter than 8 characters'))
+    if '@' not in email or len(pw) < 8:
+        again = r'venv\Scripts\python ops\first_admin.py --reset' if os.name == 'nt' else 'bash ~/timetable/standby/phone.sh admin --reset'
+        print(t(f'  ✖ البريد أو كلمة المرور غير صالحين — أعد التشغيل: {again}', f'  ✖ Invalid email or password - run again: {again}'))
         sys.exit(1)
     r = app.test_cli_runner().invoke(args=['create-admin', '--email', email, '--password', pw])
     print('  ' + (r.output or '').strip())
