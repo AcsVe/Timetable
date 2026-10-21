@@ -13,6 +13,8 @@
 #   bash ~/timetable/standby/phone.sh status       # أين يعمل الآن
 #   bash ~/timetable/standby/phone.sh backup       # رفع بيانات الهاتف إلى Drive
 #   bash ~/timetable/standby/phone.sh try          # تجربة على الهاتف فقط: http://127.0.0.1:8004
+#   bash ~/timetable/standby/phone.sh import       # نقل البيانات من Neon (Render) إلى الهاتف + مدير النظام
+#   bash ~/timetable/standby/phone.sh admin        # إنشاء مدير النظام (أو --reset لتغيير كلمة المرور)
 #
 #  القفل واللغة مشتركان مع أزرار IAJ (IAJ 0 / IAJ 9).
 # ================================================================
@@ -122,12 +124,41 @@ case "$1" in
     need_code; ensure_env; pg_up
     say "$(T "تنزيل أحدث بيانات الجدول من Drive" "Downloading the latest timetable data from Drive")"
     mkdir -p "$LOCAL_BK/db"
-    rclone copy "$TT_REMOTE/db" "$LOCAL_BK/db" --include "*.sql.gz" --max-age 30d --progress
+    rclone copy "$TT_REMOTE/db" "$LOCAL_BK/db" --include "*.sql.gz" --max-age 30d --progress || true
     if neon_on; then
       say "$(T "جلب أحدث نسخة من Neon أيضاً (تُستخدم الأحدث بين Drive وNeon)" "Also fetching the latest copy from Neon (the newer of Drive/Neon is used)")"
       (cd "$SITE" && python ops/neon_store.py pull "$LOCAL_BK/db") || say "$(T "تعذّر Neon — أكمل بنسخة Drive" "Neon failed - continuing with the Drive copy")"
     fi
+    if ! ls "$LOCAL_BK/db"/timetable-*.sql.gz >/dev/null 2>&1; then
+      # لا نسخة بعد (الهاتف أولاً، قبل تشغيل الكمبيوتر): تُستعمل البيانات الموجودة على الهاتف
+      HAS=$(cd "$SITE" && python -c "import sys;sys.path.insert(0,'ops');from common import load_env;load_env();import pgtools;print(pgtools.check(pgtools.db_url())[0])")
+      [ "${HAS:-0}" -gt 0 ] || die "$(T "لا توجد نسخة في Drive ولا بيانات على الهاتف — انقل البيانات أولاً: bash $0 import" "No backup in Drive and no data on the phone - copy the data first: bash $0 import")"
+      say "$(T "لا توجد نسخة في Drive بعد — تُستعمل البيانات الموجودة على الهاتف" "No backup in Drive yet - using the data already on the phone")"
+      exit 0
+    fi
     cd "$SITE" && python ops/restore.py --latest "$LOCAL_BK" --yes
+    ;;
+
+  import)
+    # نقل البيانات من Neon (قاعدة Render) إلى الهاتف — للبدء على الهاتف قبل الكمبيوتر
+    guard; need_code; ensure_env; pg_up
+    cd "$SITE" && python ops/import_neon.py
+    python serve.py --prepare >/dev/null 2>&1 || true
+    python ops/first_admin.py
+    ;;
+
+  admin)
+    # إنشاء مدير النظام، أو تغيير كلمة مروره (--reset)
+    need_code; ensure_env; pg_up
+    cd "$SITE" && python serve.py --prepare >/dev/null 2>&1 || true
+    python ops/first_admin.py ${2:+$2}
+    ;;
+
+  link)
+    # ربط 4.iajaward.org ونفق الهاتف (مرة واحدة) — يفعله 1_setup.bat على الكمبيوتر، وهذا للبدء من الهاتف
+    need_code; ensure_env
+    grep -q '^CF_API_TOKEN=.' "$SITE/.env" || die "$(T "لا يوجد رمز Cloudflare — شغّل configure" "No Cloudflare token - run configure")"
+    cd "$SITE" && python ops/cf.py setup
     ;;
 
   mail)
@@ -160,8 +191,10 @@ case "$1" in
       read -r -s -p "$(T "  الصق رمز Cloudflare API ثم Enter: " "  Paste the Cloudflare API token, then Enter: ")" TK; echo
       [ -n "$TK" ] && echo "CF_API_TOKEN=$TK" >> "$SITE/.env"; }
     say "$(T "جلب رمز نفق الهاتف timetable-standby من Cloudflare (يُحفظ ولا يظهر)" "Fetching the phone tunnel token from Cloudflare (saved, not shown)")"
-    (cd "$SITE" && python ops/cf.py token > "$TOKEN_FILE.tmp") && [ -s "$TOKEN_FILE.tmp" ] && mv "$TOKEN_FILE.tmp" "$TOKEN_FILE" && chmod 600 "$TOKEN_FILE" \
-      || { rm -f "$TOKEN_FILE.tmp"; die "$(T "تعذّر — شغّل أولاً على الكمبيوتر 1_setup.bat (ينشئ النفق)" "Failed - run 1_setup.bat on the PC first (it creates the tunnel)")"; }
+    # النفق يُنشأ عادةً من الكمبيوتر (1_setup.bat)؛ إن لم يوجد بعد يُنشأ من هنا (البدء من الهاتف)
+    (cd "$SITE" && python ops/cf.py token > "$TOKEN_FILE.tmp" 2>/dev/null) || (cd "$SITE" && python ops/cf.py setup && python ops/cf.py token > "$TOKEN_FILE.tmp")
+    [ -s "$TOKEN_FILE.tmp" ] && mv "$TOKEN_FILE.tmp" "$TOKEN_FILE" && chmod 600 "$TOKEN_FILE" \
+      || { rm -f "$TOKEN_FILE.tmp"; die "$(T "تعذّر جلب رمز النفق — تأكد من رمز Cloudflare" "Could not get the tunnel token - check the Cloudflare token")"; }
     if ! grep -q '^MS_CLIENT_SECRET=.' "$SITE/.env" && [ ! -f "$SITE/.mail_skip" ]; then
       ask_mail; grep -q '^MS_CLIENT_SECRET=.' "$SITE/.env" || touch "$SITE/.mail_skip"
     fi
@@ -284,6 +317,6 @@ case "$1" in
     ;;
 
   *)
-    sed -n '2,19p' "$0"
+    sed -n '2,21p' "$0"
     ;;
 esac
