@@ -10,7 +10,8 @@ let prefs = { favorites: [], collapsed: [] };
 let saveTimer = null;
 let favHost = null;
 
-const sidebar = () => document.getElementById('sidebar');
+// the scrolling menu inside the sidebar (the brand block above it stays put)
+const sidebar = () => document.getElementById('side-nav');
 const links = () => [...sidebar().querySelectorAll('.nav-item > a[data-route]')];
 
 /** Build the structure once, before the static texts are captured for translation (labels are Arabic here). */
@@ -40,7 +41,7 @@ export function buildNav() {
       (group === top ? top : group.querySelector('.nav-body')).append(item);
     }
   }
-  favHost = h('section', { class: 'nav-favs', hidden: true }, h('div', { class: 'nav-fav-title' }, 'المفضلة'), h('div', { class: 'nav-fav-list' }));
+  favHost = h('section', { class: 'nav-favs', hidden: true }, h('div', { class: 'nav-fav-title' }, h('i', { class: 'fa-solid fa-star', 'aria-hidden': 'true' }), h('span', {}, 'المفضلة')), h('div', { class: 'nav-fav-list' }));
   sb.replaceChildren(favHost, ...groups);
   // remembered locally until the account's copy arrives
   try { apply(JSON.parse(localStorage.getItem(LOCAL) || 'null') || prefs); } catch (_) { apply(prefs); }
@@ -89,10 +90,11 @@ export function drawFavorites() {
   const list = favHost.querySelector('.nav-fav-list');
   list.replaceChildren(...favs.map(r => h('div', { class: 'nav-item' },
     h('a', { href: byRoute[r].getAttribute('href'), dataset: { route: r, fav: '1' },
-             class: byRoute[r].classList.contains('active') ? 'active' : null }, t(byRoute[r].dataset.label)),
+             class: byRoute[r].classList.contains('active') ? 'active' : null },
+      byRoute[r].querySelector('i') ? byRoute[r].querySelector('i').cloneNode(true) : null, h('span', {}, t(byRoute[r].dataset.label))),
     h('button', { type: 'button', class: 'nav-star on', title: t('إزالة من المفضلة'), 'aria-label': t('إزالة من المفضلة'),
                   'aria-pressed': 'true', onclick: e => { e.preventDefault(); toggleFav(r); } }, '★'))));
-  favHost.querySelector('.nav-fav-title').textContent = `${t('المفضلة')} (${favs.length})`;
+  favHost.querySelector('.nav-fav-title span').textContent = `${t('المفضلة')} (${favs.length})`;
   favHost.hidden = !favs.length;
   for (const s of sidebar().querySelectorAll('.nav-star[data-route]')) {
     const on = prefs.favorites.includes(s.dataset.route);

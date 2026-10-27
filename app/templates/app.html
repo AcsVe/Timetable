@@ -3,71 +3,87 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#1f4e8c">
+  <meta name="theme-color" content="#0C67EC">
   <title>جدولة الحصص</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
-  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+  <link rel="icon" href="{{ url_for('static', filename='brand/system.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}" sizes="192x192">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ asset_version }}">
 </head>
-<body>
-  <div id="offline-banner" class="banner" hidden>لا يوجد اتصال بالإنترنت — وضع العرض فقط، ولا يمكن الحفظ الآن</div>
-  <header class="topbar">
-    <button class="icon-btn" id="nav-toggle" aria-label="القائمة">☰</button>
-    <img id="school-logo" alt="شعار المدرسة" hidden>
-    <div class="brand"><span id="school-name">جدولة الحصص</span></div>
-    <div class="tt-picker">
-      <label for="tt-select">الجدول:</label>
-      <select id="tt-select"></select>
-    </div>
-    <div class="spacer"></div>
-    <button class="btn ghost notif-btn" id="notif-btn" type="button" aria-label="الإشعارات" title="الإشعارات">🔔<span id="notif-count" class="notif-count" hidden></span></button>
-    <button class="btn ghost" id="lang-toggle">English</button>
-    <span id="user-name" class="muted"></span>
-    <form method="post" action="/auth/logout"><button class="btn ghost" type="submit">تسجيل الخروج</button></form>
-  </header>
-  <div class="layout">
-    <nav id="sidebar" class="sidebar">
-      <a href="#/home" data-route="home">البداية</a>
-      <a href="#/import" data-route="import" data-admin class="nav-strong">الاستيراد (aSc / Excel)</a>
+<body class="app">
+  <div class="nav-overlay" data-nav-close></div>
+  <aside id="sidebar" class="sidebar" aria-label="القائمة الرئيسية">
+    <a class="side-brand" href="#/home">
+      <img id="school-logo" class="brand-logo sys-icon" src="{{ url_for('static', filename='brand/system.svg') }}" alt="">
+      <span class="org" id="school-name">جدولة الحصص</span>
+      <span class="sys">نظام جدولة الحصص</span>
+    </a>
+    <nav id="side-nav" class="side-nav">
+      <a href="#/home" data-route="home"><i class="fa-solid fa-house" aria-hidden="true"></i><span>البداية</span></a>
+      <a href="#/import" data-route="import" data-admin class="nav-strong"><i class="fa-solid fa-file-import" aria-hidden="true"></i><span>الاستيراد (aSc / Excel)</span></a>
       <div class="nav-title" data-group="timetable">الجدول</div>
-      <a href="#/timetables" data-route="timetables">الجداول</a>
-      <a href="#/curriculum" data-route="curriculum">الخطة الدراسية</a>
-      <a href="#/plans" data-route="plans">منشئ الخطط</a>
-      <a href="#/lessons" data-route="lessons">الدروس والتوزيع</a>
-      <a href="#/meetings" data-route="meetings">الاجتماعات</a>
-      <a href="#/loads" data-route="loads">قواعد النصاب</a>
-      <a href="#/grid" data-route="grid">شبكة الجدول</a>
-      <a href="#/generate" data-route="generate" data-admin>المولّد التلقائي</a>
-      <a href="#/validate" data-route="validate">التحقق</a>
-      <a href="#/reports" data-route="reports">التقارير</a>
+      <a href="#/timetables" data-route="timetables"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i><span>الجداول</span></a>
+      <a href="#/curriculum" data-route="curriculum"><i class="fa-solid fa-book-open" aria-hidden="true"></i><span>الخطة الدراسية</span></a>
+      <a href="#/plans" data-route="plans"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i><span>منشئ الخطط</span></a>
+      <a href="#/lessons" data-route="lessons"><i class="fa-solid fa-chalkboard-user" aria-hidden="true"></i><span>الدروس والتوزيع</span></a>
+      <a href="#/meetings" data-route="meetings"><i class="fa-solid fa-people-group" aria-hidden="true"></i><span>الاجتماعات</span></a>
+      <a href="#/loads" data-route="loads"><i class="fa-solid fa-scale-balanced" aria-hidden="true"></i><span>قواعد النصاب</span></a>
+      <a href="#/grid" data-route="grid"><i class="fa-solid fa-table-cells" aria-hidden="true"></i><span>شبكة الجدول</span></a>
+      <a href="#/generate" data-route="generate" data-admin><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>المولّد التلقائي</span></a>
+      <a href="#/validate" data-route="validate"><i class="fa-solid fa-circle-check" aria-hidden="true"></i><span>التحقق</span></a>
+      <a href="#/reports" data-route="reports"><i class="fa-solid fa-chart-column" aria-hidden="true"></i><span>التقارير</span></a>
       <div class="nav-title" data-group="school-ops">الغياب والامتحانات والمناوبة</div>
-      <a href="#/cover" data-route="cover">الغياب وحصص الإشغال</a>
-      <a href="#/exams" data-route="exams">جدول الامتحانات</a>
-      <a href="#/duties" data-route="duties">جدول المناوبة</a>
+      <a href="#/cover" data-route="cover"><i class="fa-solid fa-user-clock" aria-hidden="true"></i><span>الغياب وحصص الإشغال</span></a>
+      <a href="#/exams" data-route="exams"><i class="fa-solid fa-file-pen" aria-hidden="true"></i><span>جدول الامتحانات</span></a>
+      <a href="#/duties" data-route="duties"><i class="fa-solid fa-clipboard-user" aria-hidden="true"></i><span>جدول المناوبة</span></a>
       <div class="nav-title" data-group="school-data">بيانات المدرسة</div>
-      <a href="#/setup/stages" data-route="setup/stages">المراحل</a>
-      <a href="#/setup/grades" data-route="setup/grades">الصفوف</a>
-      <a href="#/setup/sections" data-route="setup/sections">الشعب</a>
-      <a href="#/setup/divisions" data-route="setup/divisions">التقسيمات والمجموعات</a>
-      <a href="#/setup/students" data-route="setup/students">الطلبة</a>
-      <a href="#/setup/subjects" data-route="setup/subjects">المباحث</a>
-      <a href="#/setup/teachers" data-route="setup/teachers">المعلمون</a>
-      <a href="#/setup/rooms" data-route="setup/rooms">القاعات</a>
-      <a href="#/bells" data-route="bells">توقيت الحصص</a>
-      <a href="#/setup/holidays" data-route="setup/holidays">العطل الرسمية</a>
-      <a href="#/availability" data-route="availability">أوقات عدم التوفر</a>
+      <a href="#/setup/stages" data-route="setup/stages"><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>المراحل</span></a>
+      <a href="#/setup/grades" data-route="setup/grades"><i class="fa-solid fa-stairs" aria-hidden="true"></i><span>الصفوف</span></a>
+      <a href="#/setup/sections" data-route="setup/sections"><i class="fa-solid fa-users-rectangle" aria-hidden="true"></i><span>الشعب</span></a>
+      <a href="#/setup/divisions" data-route="setup/divisions"><i class="fa-solid fa-object-ungroup" aria-hidden="true"></i><span>التقسيمات والمجموعات</span></a>
+      <a href="#/setup/students" data-route="setup/students"><i class="fa-solid fa-user-graduate" aria-hidden="true"></i><span>الطلبة</span></a>
+      <a href="#/setup/subjects" data-route="setup/subjects"><i class="fa-solid fa-book" aria-hidden="true"></i><span>المباحث</span></a>
+      <a href="#/setup/teachers" data-route="setup/teachers"><i class="fa-solid fa-person-chalkboard" aria-hidden="true"></i><span>المعلمون</span></a>
+      <a href="#/setup/rooms" data-route="setup/rooms"><i class="fa-solid fa-door-open" aria-hidden="true"></i><span>القاعات</span></a>
+      <a href="#/bells" data-route="bells"><i class="fa-solid fa-bell" aria-hidden="true"></i><span>توقيت الحصص</span></a>
+      <a href="#/setup/holidays" data-route="setup/holidays"><i class="fa-solid fa-umbrella-beach" aria-hidden="true"></i><span>العطل الرسمية</span></a>
+      <a href="#/availability" data-route="availability"><i class="fa-solid fa-calendar-xmark" aria-hidden="true"></i><span>أوقات عدم التوفر</span></a>
       <div class="nav-title" data-group="system">النظام</div>
-      <a href="#/setup/academic-years" data-route="setup/academic-years">السنوات الدراسية</a>
-      <a href="#/setup/terms" data-route="setup/terms">الفصول الدراسية</a>
-      <a href="#/setup/weekdays" data-route="setup/weekdays">أيام الأسبوع</a>
-      <a href="#/setup/buildings" data-route="setup/buildings">المباني</a>
-      <a href="#/setup/users" data-route="setup/users" data-admin>المستخدمون</a>
-      <a href="#/school" data-route="school" data-admin>بيانات المدرسة</a>
-      <a href="#/mail" data-route="mail" data-admin>البريد عبر Microsoft 365</a>
+      <a href="#/setup/academic-years" data-route="setup/academic-years"><i class="fa-solid fa-calendar" aria-hidden="true"></i><span>السنوات الدراسية</span></a>
+      <a href="#/setup/terms" data-route="setup/terms"><i class="fa-solid fa-calendar-week" aria-hidden="true"></i><span>الفصول الدراسية</span></a>
+      <a href="#/setup/weekdays" data-route="setup/weekdays"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i><span>أيام الأسبوع</span></a>
+      <a href="#/setup/buildings" data-route="setup/buildings"><i class="fa-solid fa-building" aria-hidden="true"></i><span>المباني</span></a>
+      <a href="#/setup/users" data-route="setup/users" data-admin><i class="fa-solid fa-users-gear" aria-hidden="true"></i><span>المستخدمون</span></a>
+      <a href="#/school" data-route="school" data-admin><i class="fa-solid fa-school" aria-hidden="true"></i><span>بيانات المدرسة</span></a>
+      <a href="#/mail" data-route="mail" data-admin><i class="fa-solid fa-envelope" aria-hidden="true"></i><span>البريد عبر Microsoft 365</span></a>
     </nav>
+  </aside>
+  <div class="shell">
+    <div id="offline-banner" class="banner" hidden>لا يوجد اتصال بالإنترنت — وضع العرض فقط، ولا يمكن الحفظ الآن</div>
+    <header class="topbar">
+      <button class="icon-btn nav-toggle" id="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="القائمة"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
+      <div class="page-title" id="page-title"></div>
+      <div class="tt-picker">
+        <label for="tt-select">الجدول:</label>
+        <select id="tt-select"></select>
+      </div>
+      <div class="top-actions">
+        <button class="icon-btn notif-btn" id="notif-btn" type="button" aria-label="الإشعارات" title="الإشعارات"><i class="fa-solid fa-bell" aria-hidden="true"></i><span id="notif-count" class="notif-count" hidden></span></button>
+        <button class="lang-switch" id="lang-toggle" type="button">English</button>
+        <details class="user-menu" id="user-menu">
+          <summary aria-label="حساب المستخدم"><span class="avatar" id="user-avatar" aria-hidden="true"></span><span class="uname" id="user-name"></span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+          <div class="menu">
+            <div class="menu-head"><b id="menu-name"></b><small id="menu-email"></small></div>
+            <button type="button" class="menu-item" id="change-password"><i class="fa-solid fa-key" aria-hidden="true"></i><span>تغيير كلمة المرور</span></button>
+            <form method="post" action="/auth/logout"><button type="submit" class="menu-item logout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i><span>تسجيل الخروج</span></button></form>
+          </div>
+        </details>
+      </div>
+    </header>
     <main id="view" class="view"><p class="muted">جارٍ التحميل…</p></main>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

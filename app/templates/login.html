@@ -1,15 +1,19 @@
 {% extends "base.html" %}
 {% block title %}تسجيل الدخول — جدولة الحصص{% endblock %}
+{% block title_en %}Sign in — School Timetable{% endblock %}
+{% block heading %}تسجيل الدخول{% endblock %}
+{% block heading_en %}Sign in{% endblock %}
 {% block body %}
-<div class="wrap">
-  <form class="card" method="post">
-    <h1>تسجيل الدخول</h1>
-    <label for="email">البريد الإلكتروني</label>
-    <input id="email" name="email" type="email" value="{{ email or '' }}" autocomplete="username" required>
-    <label for="password">كلمة المرور</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" required>
-    <button type="submit">الدخول</button>
-    {% if error %}<p class="err">البريد الإلكتروني أو كلمة المرور غير صحيحة، أو أن الحساب غير مفعّل.</p>{% endif %}
-  </form>
-</div>
+{% if error %}<div class="alert danger" role="alert" data-en="Wrong email or password, or the account is inactive.">البريد الإلكتروني أو كلمة المرور غير صحيحة، أو أن الحساب غير مفعّل.</div>{% endif %}
+<form method="post">
+  <div class="field"><label for="email" data-en="Email">البريد الإلكتروني</label>
+    <div class="input-group"><i class="fa-solid fa-envelope" aria-hidden="true"></i>
+      <input id="email" name="email" type="email" value="{{ email or '' }}" autocomplete="username" dir="ltr" required autofocus></div></div>
+  <div class="field"><label for="password" data-en="Password">كلمة المرور</label>
+    <div class="input-group"><i class="fa-solid fa-lock" aria-hidden="true"></i>
+      <input id="password" name="password" type="password" class="has-eye" autocomplete="current-password" dir="ltr" required>
+      <button type="button" class="eye" data-eye="password" aria-pressed="false" aria-label="إظهار كلمة المرور" data-en-label="Show password"><i class="fa-solid fa-eye" aria-hidden="true"></i></button></div></div>
+  <button class="btn" type="submit"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i> <span data-en="Sign in">الدخول</span></button>
+</form>
+<p class="auth-note" data-en="Forgot your password? Ask the system administrator to reset it.">نسيت كلمة المرور؟ يعيد مدير النظام تعيينها من صفحة المستخدمين.</p>
 {% endblock %}

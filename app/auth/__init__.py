@@ -62,6 +62,25 @@ def logout():
     return redirect(url_for("auth.login"))
 
 
+@auth_bp.post("/me/password")
+@login_required
+def change_password():
+    """The signed-in user changes their own password (the current one is required)."""
+    data = request.get_json(silent=True) or {}
+    current = data.get("current_password") or ""
+    new = data.get("new_password") or ""
+    if not current_user.check_password(current):
+        return jsonify(error="bad_password", message="كلمة المرور الحالية غير صحيحة",
+                       message_en="The current password is wrong"), 400
+    if len(new) < 8:
+        return jsonify(error="validation", message="كلمة المرور الجديدة ثمانية أحرف على الأقل",
+                       message_en="The new password must be at least 8 characters"), 400
+    user = db.session.get(AppUser, current_user.id)
+    user.set_password(new)
+    db.session.commit()
+    return jsonify(ok=True)
+
+
 def serialize_me(user: AppUser) -> dict:
     return {
         "id": str(user.id),

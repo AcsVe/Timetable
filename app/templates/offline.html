@@ -1,7 +1,6 @@
 {% extends "base.html" %}
+{% block heading %}لا يوجد اتصال{% endblock %}
+{% block heading_en %}No connection{% endblock %}
 {% block body %}
-<div class="wrap"><div class="card">
-  <h1>لا يوجد اتصال</h1>
-  <p>لم تُحمَّل هذه الصفحة من قبل على هذا الجهاز. افتح النظام مرة واحدة وأنت متصل، وبعدها ستتمكن من عرض آخر بيانات محمّلة دون اتصال.</p>
-</div></div>
+<p class="auth-note" data-en="This page has not been opened on this device before. Open the system once while online; after that the last loaded data can be viewed offline.">لم تُحمَّل هذه الصفحة من قبل على هذا الجهاز. افتح النظام مرة واحدة وأنت متصل، وبعدها ستتمكن من عرض آخر بيانات محمّلة دون اتصال.</p>
 {% endblock %}

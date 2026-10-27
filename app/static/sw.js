@@ -6,9 +6,9 @@
  *  - writes are never queued here: offline saves are refused with a clear message.
  * Bump VERSION when static files change.
  */
-const VERSION = '2026.10.19-2';
+const VERSION = '2026.10.26-1';
 const SHELL = `shell-${VERSION}`;
-const FONTS = 'fonts-v1';
+const FONTS = 'fonts-v2';
 const PRECACHE = [
   '/offline',
   '/manifest.webmanifest',
@@ -41,8 +41,11 @@ const PRECACHE = [
   '/static/js/views/notify.js',
   '/static/js/views/mail.js',
   '/static/js/views/generate.js',
+  '/static/js/auth.js',
+  '/static/brand/system.svg',
   '/static/icons/icon-192.png',
   '/static/icons/icon-512.png',
+  '/static/icons/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', event => {
@@ -87,7 +90,8 @@ self.addEventListener('fetch', event => {
     if (url.pathname.startsWith('/static/')) { event.respondWith(staleWhileRevalidate(req)); return; }
     return;
   }
-  if (url.hostname.endsWith('fonts.googleapis.com') || url.hostname.endsWith('fonts.gstatic.com')) {
+  if (url.hostname.endsWith('fonts.googleapis.com') || url.hostname.endsWith('fonts.gstatic.com')
+      || url.hostname === 'cdnjs.cloudflare.com') {      // Tajawal and the Font Awesome icons
     event.respondWith(cacheFirst(req, FONTS));
   }
 });

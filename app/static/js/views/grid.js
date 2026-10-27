@@ -59,7 +59,7 @@ export async function render(root) {
   let allowed = null;                         // Map "dayId|period" -> {ok, messages}
   const editable = canEdit() && !ctx.readOnly;
   const gridHost = h('div', { class: 'grid-wrap' });
-  const info = h('div', { class: 'legend' });
+  const info = h('div', { class: 'legend pick-info' });
   const noticeHost = h('div');
   const noticeP = loadNotice(ctx.tt);
   const isWhole = () => WHOLE.has(mode);

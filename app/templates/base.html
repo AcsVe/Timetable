@@ -1,24 +1,34 @@
+{# Pages shown before sign-in (sign-in, offline): the SAS / appace look. Texts carry their English in
+   data-en; static/js/auth.js switches the language (the choice is shared with the app) and runs the password eye. #}
+{% set brand = school_brand() %}
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}جدولة الحصص{% endblock %}</title>
+  <meta name="theme-color" content="#0C67EC">
+  <title data-en="{% block title_en %}School Timetable{% endblock %}">{% block title %}جدولة الحصص{% endblock %}</title>
+  <link rel="icon" href="{{ url_for('static', filename='brand/system.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}" sizes="192x192">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
-  <style>
-    :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2330; --muted:#667085; --accent:#1f6feb; --err:#b42318; }
-    * { box-sizing: border-box; }
-    body { margin:0; font-family:'Tajawal',system-ui,sans-serif; background:var(--bg); color:var(--ink); }
-    .wrap { max-width: 420px; margin: 10vh auto; padding: 0 16px; }
-    .card { background:var(--card); border-radius:12px; padding:28px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
-    h1 { font-size:1.4rem; margin:0 0 18px; }
-    label { display:block; margin:12px 0 6px; color:var(--muted); font-size:.95rem; }
-    input { width:100%; padding:10px 12px; border:1px solid #d0d5dd; border-radius:8px; font:inherit; }
-    button { margin-top:18px; width:100%; padding:11px; border:0; border-radius:8px; background:var(--accent);
-             color:#fff; font:inherit; font-weight:700; cursor:pointer; }
-    .err { color:var(--err); margin-top:12px; }
-  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ asset_version }}">
+  <script src="{{ url_for('static', filename='js/auth.js') }}?v={{ asset_version }}" defer></script>
 </head>
-<body>{% block body %}{% endblock %}</body>
+<body class="auth">
+  <div class="auth-wrap"><div class="auth-card">
+    <div class="auth-lang"><button type="button" class="lang-switch" id="auth-lang" lang="en">English</button></div>
+    <div class="logo-circle">
+      {% if brand.logo %}<img class="brand-logo" src="{{ brand.logo }}" alt="">
+      {% else %}<img class="brand-logo sys-icon" src="{{ url_for('static', filename='brand/system.svg') }}" alt="">{% endif %}
+    </div>
+    <div class="brand-title" data-en="{{ brand.name_en }}">{{ brand.name_ar }}</div>
+    <div class="brand-sub" data-en="School timetable system">نظام جدولة الحصص</div>
+    <h1 data-en="{% block heading_en %}{% endblock %}">{% block heading %}{% endblock %}</h1>
+    {% block body %}{% endblock %}
+  </div></div>
+  <footer class="auth-foot">© {{ now_year }} <b data-en="{{ brand.name_en }}">{{ brand.name_ar }}</b></footer>
+</body>
 </html>

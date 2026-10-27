@@ -1,7 +1,7 @@
 import * as api from './api.js';
 import { captureStaticText, lang, setLang, t, onLangChange } from './i18n.js';
 import { state, isAdmin } from './store.js';
-import { h, jumpTo, put, swap, toast, toastError } from './ui.js';
+import { h, jumpTo, openForm, put, swap, toast, toastError } from './ui.js';
 import { buildNav, drawFavorites, loadNavPrefs, revealRoute } from './nav.js';
 
 const ROUTES = {
@@ -73,9 +73,11 @@ async function route() {
   currentPath = path;
 
   const [name, ...rest] = path.split('/');
-  document.querySelectorAll('#sidebar a').forEach(a => a.classList.toggle('active', a.dataset.route === path || path.startsWith(`${a.dataset.route}/`)));
+  document.querySelectorAll('#sidebar a[data-route]').forEach(a => a.classList.toggle('active', a.dataset.route === path || path.startsWith(`${a.dataset.route}/`)));
   revealRoute(path);
-  document.getElementById('sidebar').classList.remove('open');
+  closeNav();
+  const here = document.querySelector('#side-nav .nav-group a.active, #side-nav .nav-top a.active');
+  document.getElementById('page-title').textContent = here ? t(here.dataset.label) : '';
   const loader = ROUTES[name];
   const token = ++renderToken;
   if (!loader) { view.replaceChildren(h('p', {}, t('الصفحة غير موجودة'))); return; }
@@ -119,6 +121,78 @@ export async function loadTimetables() {
     : [h('option', { value: '' }, t('لا يوجد جدول بعد'))]));
 }
 
+// ---------------------------------------------------------------------------
+// Shell: off-canvas menu on phones, user menu, school name and logo in the sidebar
+// ---------------------------------------------------------------------------
+const SYSTEM_ICON = '/static/brand/system.svg';
+function closeNav() {
+  document.body.classList.remove('nav-open');
+  const btn = document.getElementById('nav-toggle');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+function setupShell() {
+  const btn = document.getElementById('nav-toggle');
+  btn.onclick = () => {
+    const open = document.body.classList.toggle('nav-open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+  document.addEventListener('click', e => {
+    if (e.target.closest('[data-nav-close]')) closeNav();
+    for (const d of document.querySelectorAll('details.user-menu[open]')) if (!d.contains(e.target)) d.removeAttribute('open');
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    closeNav();
+    for (const d of document.querySelectorAll('details.user-menu[open]')) d.removeAttribute('open');
+  });
+  document.getElementById('change-password').onclick = () => {
+    document.getElementById('user-menu').removeAttribute('open');
+    changePassword();
+  };
+}
+
+async function changePassword() {
+  const done = await openForm({
+    title: t('تغيير كلمة المرور'),
+    submitLabel: t('حفظ'),
+    fields: [
+      { name: 'current_password', label: t('كلمة المرور الحالية'), type: 'password', full: true },
+      { name: 'new_password', label: t('كلمة المرور الجديدة'), type: 'password', full: true, help: t('ثمانية أحرف على الأقل') },
+      { name: 'confirm', label: t('تأكيد كلمة المرور الجديدة'), type: 'password', full: true },
+    ],
+    onSubmit: async v => {
+      if (!v.current_password || !v.new_password) throw new Error(t('أكمل الحقول'));
+      if ((v.new_password || '').length < 8) throw new Error(t('ثمانية أحرف على الأقل'));
+      if (v.new_password !== v.confirm) throw new Error(t('كلمتا المرور غير متطابقتين'));
+      return api.post('/auth/me/password', { current_password: v.current_password, new_password: v.new_password });
+    },
+  });
+  if (done) toast(t('تم تغيير كلمة المرور'), 'ok');
+}
+
+/** The school's name and logo in the sidebar (the system icon until a logo is uploaded). */
+export function drawBrand() {
+  const school = state.school;
+  const name = school ? (lang === 'en' && school.name_en ? school.name_en : school.name_ar) : t('جدولة الحصص');
+  const el = document.getElementById('school-name');
+  el.textContent = name;
+  el.title = name;
+  const img = document.getElementById('school-logo');
+  const logo = school && school.logo_path;
+  img.src = logo || SYSTEM_ICON;
+  img.classList.toggle('sys-icon', !logo);
+  img.alt = logo ? `${t('شعار')} ${name}` : '';
+  img.hidden = false;
+}
+
+function drawUser() {
+  const me = state.me;
+  document.getElementById('user-name').textContent = me.display_name;
+  document.getElementById('menu-name').textContent = me.display_name;
+  document.getElementById('menu-email').textContent = me.email;
+  document.getElementById('user-avatar').textContent = (me.display_name || me.email || '?').trim().slice(0, 1);
+}
+
 function trackTopbarHeight() {
   const bar = document.querySelector('.topbar');
   const set = () => document.documentElement.style.setProperty('--topbar-h', `${bar.offsetHeight}px`);
@@ -133,30 +207,22 @@ async function boot() {
   captureStaticText();
   setLang(lang);
   document.getElementById('lang-toggle').onclick = () => setLang(lang === 'ar' ? 'en' : 'ar');
-  document.getElementById('nav-toggle').onclick = () => document.getElementById('sidebar').classList.toggle('open');
-  // Phone menu: a tap outside it closes it.
-  document.addEventListener('click', e => {
-    const sb = document.getElementById('sidebar');
-    if (sb.classList.contains('open') && !sb.contains(e.target) && !e.target.closest('#nav-toggle')) sb.classList.remove('open');
-  });
+  setupShell();
   api.onOfflineChange(off => { document.getElementById('offline-banner').hidden = !off; });
-  onLangChange(async () => { drawFavorites(); await loadTimetables().catch(() => {}); route(); });
+  onLangChange(async () => { drawFavorites(); drawBrand(); await loadTimetables().catch(() => {}); route(); });
 
   try {
     state.me = (await api.get('/auth/me')).user;
   } catch (e) { toastError(e); return; }
-  document.getElementById('user-name').textContent = state.me.display_name;
+  drawUser();
   if (!isAdmin()) document.querySelectorAll('[data-admin]').forEach(a => (a.closest('.nav-item') || a).remove());
   loadNavPrefs(state.me);
 
   try {
     const school = (await api.get('/api/school')).items[0];
     state.school = school || null;
-    if (school) {
-      document.getElementById('school-name').textContent = lang === 'en' && school.name_en ? school.name_en : school.name_ar;
-      if (school.logo_path) { const img = document.getElementById('school-logo'); img.src = school.logo_path; img.alt = `${t('شعار')} ${school.name_ar}`; img.hidden = false; }
-    }
   } catch (_) { /* optional */ }
+  drawBrand();
 
   await loadTimetables().catch(toastError);
   setupNotifications();

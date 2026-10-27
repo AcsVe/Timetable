@@ -26,3 +26,23 @@ def test_menu_prefs_are_saved_per_user_without_audit_noise(admin, ctx):
     assert admin.ok("get", "/auth/me")["user"]["ui_prefs"] == {}
     admin.logout()
     assert admin.c.put("/auth/me/prefs", json={"nav": {}}).status_code == 401
+
+
+def test_user_changes_own_password(admin):
+    r = admin.c.post("/auth/me/password", json={"current_password": "wrong-one", "new_password": "newpass123"})
+    assert r.status_code == 400 and r.get_json()["error"] == "bad_password"
+    r = admin.c.post("/auth/me/password", json={"current_password": "password123", "new_password": "short"})
+    assert r.status_code == 400
+    r = admin.c.post("/auth/me/password", json={"current_password": "password123", "new_password": "newpass123"})
+    assert r.status_code == 200
+    admin.logout()
+    assert admin.c.post("/auth/login", json={"email": "admin@school.test", "password": "password123"}).status_code == 401
+    admin.login("admin@school.test", "newpass123")
+    admin.logout()
+    assert admin.c.post("/auth/me/password", json={}).status_code == 401
+
+
+def test_login_page_shows_the_system_icon_until_a_logo_is_uploaded(api):
+    page = api.c.get("/auth/login").get_data(as_text=True)
+    assert "/static/brand/system.svg" in page and "auth-card" in page
+    assert api.c.get("/static/brand/system.svg").status_code == 200

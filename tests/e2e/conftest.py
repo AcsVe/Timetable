@@ -42,10 +42,23 @@ def live_server(app):
 
 @pytest.fixture
 def demo(app):
+    import time
+
+    from sqlalchemy.exc import OperationalError
     with app.app_context():
         tables = ", ".join(t.name for t in reversed(db.metadata.sorted_tables))
-        db.session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
-        db.session.commit()
+        # A request (or the background generator) of the previous test may still be reading: if the
+        # TRUNCATE is chosen as a deadlock victim, wait a moment and run it again.
+        for attempt in range(5):
+            try:
+                db.session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+                db.session.commit()
+                break
+            except OperationalError:
+                db.session.rollback()
+                if attempt == 4:
+                    raise
+                time.sleep(1)
     runner = app.test_cli_runner()
     assert runner.invoke(args=["seed-base"]).exit_code == 0
     admin_id = make_user("admin@school.test", password=PASSWORD)
@@ -64,10 +77,11 @@ def browser():
 
 @pytest.fixture
 def page(browser, live_server, demo):
-    ctx = browser.new_context(viewport={"width": 1400, "height": 950}, service_workers="allow")
+    ctx = browser.new_context(viewport={"width": 1400, "height": 1000}, service_workers="allow")
     # Google Fonts are unreachable in CI sandboxes; don't let that slow the tests down.
     ctx.route("**/fonts.googleapis.com/**", lambda r: r.abort())
     ctx.route("**/fonts.gstatic.com/**", lambda r: r.abort())
+    ctx.route("**/cdnjs.cloudflare.com/**", lambda r: r.abort())   # Font Awesome icons
     pg = ctx.new_page()
     pg.errors = []
     pg.on("pageerror", lambda e: pg.errors.append(str(e)))
@@ -79,4 +93,9 @@ def page(browser, live_server, demo):
     pg.click("button[type=submit]")
     pg.wait_for_selector("#tt-select option", state="attached")
     yield pg
+    # let the page's last requests finish, so the next test's reseed never races a request still reading
+    try:
+        pg.wait_for_load_state("networkidle", timeout=5000)
+    except Exception:
+        pass
     ctx.close()

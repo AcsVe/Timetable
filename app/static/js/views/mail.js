@@ -5,6 +5,22 @@ import { isAdmin, state } from '../store.js';
 import { bulkTable, h, put, searchBox, swap, toast, toastError } from '../ui.js';
 import { resetMailStatus } from './notify.js';
 
+/** Microsoft Graph status as badges (like SAS): which values are set, never the values themselves. */
+export function graphStatus(s) {
+  const badge = (on, label) => h('span', { class: `badge ${on ? 'ok' : 'bad'}` },
+    h('i', { class: `fa-solid ${on ? 'fa-check' : 'fa-xmark'}`, 'aria-hidden': 'true' }), label);
+  const fromEnv = Object.values(s.source || {}).includes('env');
+  return h('div', { class: 'graph-status', id: 'graph-status' },
+    h('b', {}, h('i', { class: 'fa-brands fa-microsoft', 'aria-hidden': 'true' }), ' Microsoft Graph'),
+    s.configured ? h('span', { class: 'badge ok' }, t('مضبوط')) : h('span', { class: 'badge bad' }, t('غير مضبوط')),
+    badge(!!s.tenant_id, 'Tenant ID'), badge(!!s.client_id, 'Client ID'), badge(!!s.has_secret, 'Client Secret'),
+    badge(!!s.enabled, t('الإرسال مفعّل')),
+    h('span', { class: 'muted' }, `${t('المرسل:')} `, h('span', { class: 'mono' }, s.sender || '—')),
+    h('p', { class: 'hint' }, fromEnv
+      ? t('بعض القيم مأخوذة من متغيرات البيئة على الخادم (MS_TENANT_ID، MS_CLIENT_ID، MS_CLIENT_SECRET، MS_MAIL_SENDER) ولا تُعدَّل من هنا.')
+      : t('تُضبط القيم في صفحة «البريد عبر Microsoft 365»، ولا يُعرض سر التطبيق بعد حفظه.')));
+}
+
 export async function render(root) {
   if (!isAdmin()) { put(root, h('p', {}, t('هذه الصفحة لمدير النظام فقط'))); return; }
   let s = await api.get('/api/mail/settings');
@@ -25,11 +41,11 @@ export async function render(root) {
     'aria-label': t('أرسل رسالة التجربة إلى') });
 
   function drawStatus() {
-    swap(statusHost, s.configured
-      ? h('p', { class: 'notice ok' }, `${t('البريد مُعَدّ ومفعّل؛ تُرسل الرسائل من')} ${s.sender}`)
-      : h('p', { class: 'notice warn' }, t('البريد غير مُعَدّ بعد: أكمل الحقول ثم احفظ وجرّب الإرسال.')),
-      Object.values(s.source || {}).includes('env')
-        ? h('p', { class: 'muted small' }, t('بعض القيم مأخوذة من متغيرات البيئة على الخادم (MS_TENANT_ID، MS_CLIENT_ID، MS_CLIENT_SECRET، MS_MAIL_SENDER) ولا تُعدَّل من هنا.')) : null);
+    swap(statusHost, h('section', { class: 'card' },
+      s.configured
+        ? h('p', { class: 'notice ok' }, `${t('البريد مُعَدّ ومفعّل؛ تُرسل الرسائل من')} ${s.sender}`)
+        : h('p', { class: 'notice warn' }, t('البريد غير مُعَدّ بعد: أكمل الحقول ثم احفظ وجرّب الإرسال.')),
+      graphStatus(s)));
   }
   const field = (label, el, help) => h('div', { class: 'field' }, h('label', { for: el.id }, label), el,
     help ? h('div', { class: 'muted small' }, help) : null);
@@ -77,7 +93,7 @@ export async function render(root) {
   put(root, h('h1', { class: 'title' }, t('البريد عبر Microsoft 365')),
     h('p', { class: 'muted' }, t('تُرسل الإشعارات (حصص الإشغال، والمراقبة على الامتحانات، والمناوبة) إلى بريد المعلمين من حساب مدرسي عبر Microsoft Graph.')),
     statusHost,
-    h('section', { class: 'stat' },
+    h('section', { class: 'card' },
       h('div', { class: 'form-grid' },
         field(t('معرّف المستأجر (Tenant ID)'), fTenant, t('من Microsoft Entra ← نظرة عامة ← Tenant ID')),
         field(t('معرّف التطبيق (Client ID)'), fClient, t('Application (client) ID للتطبيق المسجَّل')),
