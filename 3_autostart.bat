@@ -21,6 +21,6 @@ schtasks /run /tn "Timetable Website" >nul
 echo.
 echo   Done. The timetable starts with Windows (port 8004), backs up every hour,
 echo   and the watchdog checks every 5 minutes. Log: logs\server.log
-timeout /t 8 >nul
+"%SystemRoot%\System32\timeout.exe" /t 8 >nul
 start "" http://localhost:8004/
 pause
