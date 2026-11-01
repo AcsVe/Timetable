@@ -32,7 +32,7 @@ def main():
         die(t('تم الإلغاء', 'Cancelled'))
     local = pgtools.db_url()
     pgtools.ensure_database(local)
-    print(t('  تنزيل البيانات من Neon…', '  Downloading the data from Neon...'))
+    print(t('  تحميل البيانات من Neon…', '  Downloading the data from Neon...'))
     with tempfile.TemporaryDirectory() as tmpd:
         gz = os.path.join(tmpd, 'neon.sql.gz')
         pgtools.dump(url, gz)

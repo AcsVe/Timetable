@@ -107,7 +107,7 @@ case "$1" in
 
   update-code)
     if [ -f "$SITE/standby/gh_update.py" ]; then   # public repository: no token needed
-      say "$(T "تنزيل الكود من GitHub" "Downloading code from GitHub")"
+      say "$(T "تحميل الكود من GitHub" "Downloading code from GitHub")"
       if python "$SITE/standby/gh_update.py"; then
         say "$(T "تم تحديث الكود" "Code updated")"; exit 0
       fi
@@ -123,7 +123,7 @@ case "$1" in
 
   restore)
     need_code; ensure_env; pg_up
-    say "$(T "تنزيل أحدث بيانات الجدول من Drive" "Downloading the latest timetable data from Drive")"
+    say "$(T "تحميل أحدث بيانات الجدول من Drive" "Downloading the latest timetable data from Drive")"
     mkdir -p "$LOCAL_BK/db"
     rclone copy "$TT_REMOTE/db" "$LOCAL_BK/db" --include "*.sql.gz" --max-age 30d --progress || true
     if neon_on; then
@@ -170,11 +170,11 @@ case "$1" in
     guard; need_code; ensure_env
     neon_on || die "$(T "لا يوجد رابط Neon — شغّل configure وألصقه عند الطلب" "No Neon link - run configure and paste it when asked")"
     pg_up
-    say "$(T "تنزيل أحدث نسخة من Neon وتثبيتها على الهاتف" "Downloading the latest copy from Neon onto the phone")"
+    say "$(T "تحميل أحدث نسخة من Neon وتثبيتها على الهاتف" "Downloading the latest copy from Neon onto the phone")"
     mkdir -p "$LOCAL_BK/neon"
     (cd "$SITE" && python ops/neon_store.py pull "$LOCAL_BK/neon" | tail -1)
     N=$(ls -t "$LOCAL_BK/neon"/*.sql.gz 2>/dev/null | head -1)
-    [ -n "$N" ] || die "$(T "لم يُنزَّل شيء" "Nothing was downloaded")"
+    [ -n "$N" ] || die "$(T "لم يُحمَّل شيء" "Nothing was downloaded")"
     pkill -f "$SITE/serve.py" 2>/dev/null || true
     cd "$SITE" && python ops/restore.py --file "$N" --yes
     say "$(T "تم. بيانات Neon على الهاتف الآن — للتشغيل للعامة: زر «TT» ← تشغيل الطوارئ" "Done. Neon data is on the phone - to serve it publicly: the TT button > Emergency")"

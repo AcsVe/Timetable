@@ -1,6 +1,6 @@
 """ربط 4.iajaward.org (نظام الجدول المدرسي) بالكمبيوتر أو بالهاتف عبر Cloudflare API (بدون لوحة Cloudflare).
 
-    python ops/cf.py setup      # مرة واحدة: سجل DNS + ربط الاسم بنفق السيرفر + إنشاء نفق الهاتف timetable-standby
+    python ops/cf.py setup      # مرة واحدة: سجل DNS + ربط الاسم بنفق الخادم + إنشاء نفق الهاتف timetable-standby
     python ops/cf.py status     # أين يعمل 4.iajaward.org الآن + تشخيص
     python ops/cf.py phone      # 4.iajaward.org ← الهاتف
     python ops/cf.py server     # 4.iajaward.org ← الكمبيوتر

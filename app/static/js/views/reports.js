@@ -161,7 +161,7 @@ export async function render(root) {
         h('button', { class: 'btn', id: 'print-now', type: 'button', onclick: () => {
           try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (_) { window.open(url, '_blank'); }
         } }, t('طباعة')),
-        h('button', { class: 'btn ghost', type: 'button', onclick: () => download('pdf') }, t('تنزيل PDF')),
+        h('button', { class: 'btn ghost', type: 'button', onclick: () => download('pdf') }, t('تحميل PDF')),
         h('button', { class: 'btn ghost', type: 'button', onclick: () => dlg.close() }, t('إغلاق'))),
       frame);
     dlg.addEventListener('close', () => dlg.remove());
