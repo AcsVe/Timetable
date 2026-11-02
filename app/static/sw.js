@@ -6,7 +6,7 @@
  *  - writes are never queued here: offline saves are refused with a clear message.
  * Bump VERSION when static files change.
  */
-const VERSION = '2026.10.26-1';
+const VERSION = '2026.11.02-1';
 const SHELL = `shell-${VERSION}`;
 const FONTS = 'fonts-v2';
 const PRECACHE = [
@@ -109,10 +109,13 @@ async function navigate(req) {
 }
 
 async function staleWhileRevalidate(req) {
+  // The exact copy (its ?v= is the file's date): a new version after an update is fetched at once; a copy of
+  // another version is used only without a connection.
   const cache = await caches.open(SHELL);
-  const cached = await cache.match(req, { ignoreSearch: true });
+  const cached = await cache.match(req);
   const network = fetch(req).then(res => { if (res.ok) cache.put(req, res.clone()); return res; }).catch(() => null);
-  return cached || (await network) || Response.error();
+  if (cached) return cached;
+  return (await network) || (await cache.match(req, { ignoreSearch: true })) || Response.error();
 }
 
 async function cacheFirst(req, name) {

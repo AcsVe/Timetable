@@ -1,3 +1,4 @@
+import os
 from flask import Flask, jsonify
 from sqlalchemy import text
 
@@ -7,6 +8,16 @@ from app.extensions import compress, db, login_manager, migrate
 
 def create_app(config_object=Config) -> Flask:
     app = Flask(__name__)
+    # رقم نسخة من تاريخ الملف في كل رابط إلى /static/: يتغير الرابط بعد كل تحديث، فلا يبقى المتصفح ولا
+    # التطبيق المثبّت على ملف تنسيق أو برنامج قديم من التخزين المؤقت.
+    @app.url_defaults
+    def _static_version(endpoint, values):
+        if endpoint == 'static' and 'filename' in values and 'v' not in values:
+            try:
+                values['v'] = int(os.path.getmtime(os.path.join(app.static_folder, values['filename'])))
+            except OSError:
+                pass
+
     app.config.from_object(config_object)
     app.json.ensure_ascii = False
 
