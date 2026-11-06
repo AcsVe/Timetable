@@ -24,11 +24,31 @@ git log -1 --oneline
 schtasks /query /tn "Timetable Website" >nul 2>nul
 if errorlevel 1 goto manual
 net session >nul 2>nul || (echo. & echo [!] To restart automatically, run this file as administrator. Or restart the PC. & pause & exit /b 0)
-schtasks /end /tn "Timetable Website" >nul 2>nul
-"%SystemRoot%\System32\timeout.exe" /t 2 >nul
-schtasks /run /tn "Timetable Website" >nul
+REM مهمة التشغيل معطّلة (لا يبدأ مع ويندوز) والنظام يعمل: يُعاد تشغيله بالنسخة الجديدة وتبقى المهمة معطّلة.
+REM معطّلة والنظام متوقف (استُعمل ملف الإيقاف): لا يُشغَّل.
+set "TN=Timetable Website"
+set "WASOFF="
+set "WASRUN="
+schtasks /query /tn "%TN%" /fo list /v | findstr /i /c:"Scheduled Task State:" | findstr /i "Disabled" >nul && set "WASOFF=1"
+schtasks /query /tn "%TN%" /fo list | findstr /i /c:"Status:" | findstr /i "Running" >nul && set "WASRUN=1"
+if defined WASOFF if not defined WASRUN goto off
+schtasks /end /tn "%TN%" >nul 2>nul
+REM انتظار ثانيتين (ping يعمل حتى عند تحويل الإدخال، بخلاف timeout)
+ping -n 3 127.0.0.1 >nul
+if defined WASOFF schtasks /change /tn "%TN%" /enable >nul
+schtasks /run /tn "%TN%" >nul 2>nul
+set "RC=%errorlevel%"
+if defined WASOFF schtasks /change /tn "%TN%" /disable >nul
+if not "%RC%"=="0" (echo. & echo [X] The new version could not be started. If it was switched off, run tt_on.bat as administrator - or 2_start.bat to see the error. & pause & exit /b 1)
 echo.
 echo Done. The timetable was restarted with the new version (database changes apply on start).
+if defined WASOFF echo It still does not start with Windows ^(its startup task stays disabled^).
+pause
+exit /b 0
+:off
+echo.
+echo Code updated. The timetable is switched OFF ^(its startup task is disabled^), so it was not started.
+echo To turn it on: run tt_on.bat as administrator - or 2_start.bat for this session only.
 pause
 exit /b 0
 :manual
