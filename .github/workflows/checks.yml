@@ -1,0 +1,52 @@
+# الفحص الآلي مع كل رفع: ترجمة كل ملفات Python، ثم الاختبارات (ومنها اختبارات المتصفح) على PostgreSQL 16، ثم فحص
+# المظهر واللغة في متصفح حقيقي (التباين مع شفافية الآباء، والخط الصغير، واتجاه النص والتاريخ، ونصوص الإرشاد التي تشبه
+# الكود أو بلغة غير مقبولة) بالعربية والإنجليزية على الحاسوب والهاتف. يُشغَّل على Python 3.10 لأن كمبيوتر المدرسة
+# أقدم من 3.12؛ وإن فشل وصل إشعار بالبريد إلى صاحب المستودع.
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: timetable_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/timetable_test
+      AUDIT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/timetable_audit
+      E2E_CHANNEL: chromium
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: pip
+      - name: Compile
+        run: python -m compileall -q -x '(\.git|venv|\.venv)' .
+      - name: Install
+        run: |
+          pip install -r requirements-dev.txt
+          python -m playwright install --with-deps chromium
+      - name: Audit database
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE timetable_audit'
+      - name: Tests
+        run: python -m pytest -q
+      - name: UI audit
+        run: python tests/ui_audit.py

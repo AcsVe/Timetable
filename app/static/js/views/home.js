@@ -73,7 +73,7 @@ export async function render(root) {
       h('span', { class: 'step-mark', 'aria-hidden': 'true' }, s.done ? '✓' : String(i + 1)),
       h('span', { class: 'step-body' },
         h('strong', {}, s.title),
-        h('span', { class: 'muted small' }, s.info),
+        h('span', { class: 'muted small', dir: 'auto' }, s.info),
         i === next ? h('span', { class: 'chip' }, t('الخطوة التالية')) : null),
       h('a', { class: `btn small ${i === next ? '' : 'ghost'}`, href: s.href }, t('افتح'))))));
 }
