@@ -11,7 +11,7 @@
 | التقنية | Flask + Flask-Migrate/Alembic + OR-Tools + Waitress (`serve.py`) |
 | القاعدة | PostgreSQL 15+ محلية (`timetable`) — قيود `EXCLUDE` و`NULLS NOT DISTINCT`، لذلك لا SQLite |
 | الاختبار | `TEST_DATABASE_URL=postgresql://postgres@localhost/timetable_test pytest -q` (و`tests/e2e` عبر Playwright) ، ثم فحص المظهر واللغة `AUDIT_DATABASE_URL=postgresql://postgres@localhost/timetable_audit python tests/ui_audit.py` (0 ملاحظات؛ كل الشاشات بالعربية والإنجليزية على الحاسوب والهاتف ببيانات المدرسة التجريبية): التباين مع شفافية الآباء، والخط الأصغر من 13px، واتجاه النص والتاريخ، ولغة نصوص الإرشاد (placeholder وtitle وalt): نص يشبه الكود أو كلمة عامية أو دخيلة أو بغير لغة الواجهة. محتوى المستخدم في الخلايا يأخذ اتجاه نصه (`unicode-bidi: plaintext`) |
-| الفحص الآلي | `.github/workflows/checks.yml` مع كل رفع إلى `main`: ترجمة الملفات على Python 3.10، والاختبارات واختبارات المتصفح على PostgreSQL 16، وفحص المظهر؛ الفشل يصل بريداً |
+| الفحص الآلي | `.github/workflows/checks.yml` مع كل رفع إلى `main`: ترجمة الملفات على Python 3.12 (كما يتطلب دليل التثبيت)، والاختبارات واختبارات المتصفح على PostgreSQL 16، وفحص المظهر؛ الفشل يصل بريداً |
 | الأدلة | `README.md`، `SYSTEM_GUIDE_AR.md`، `SERVER_AR.md`، `docs/ERD.md` |
 
 - ترحيل القاعدة: Alembic (`migrations/`)، يُطبَّق في `serve.py` عند الإقلاع. كل تغيير في النماذج = migration جديدة.
