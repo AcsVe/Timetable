@@ -201,7 +201,8 @@ export async function render(root) {
 function renderReport(rep) {
   const head = h('div', { class: 'report-head' },
     h('div', { class: 'report-school' }, rep.school_name), h('div', { class: 'report-title' }, rep.title),
-    h('div', { class: 'muted' }, [rep.timetable_name, rep.filters, rep.generated_at].filter(Boolean).join(' — ')));
+    h('div', { class: 'muted' }, ...[rep.timetable_name ? h('bdi', {}, rep.timetable_name) : null, rep.filters ? h('bdi', {}, rep.filters) : null,
+      rep.generated_at ? h('span', { dir: 'ltr' }, rep.generated_at) : null].filter(Boolean).flatMap((x, i) => (i ? [' — ', x] : [x]))));
   const blocks = [];
   const links = [];
   const blockId = title => { const id = `r-${links.length + 1}`; links.push({ id, label: title }); return id; };

@@ -30,7 +30,8 @@ export async function render(root) {
   let timer = null;
   let force = false;
   const ui = {};
-  const num = (name, value, min, max) => h('input', { type: 'number', id: `gen-${name}`, value, min, max, class: 'narrow', 'aria-label': name });
+  // الاسم المسموع من التسمية التي تحيط بالحقل، لا من اسم المتغير
+  const num = (name, value, min, max) => h('input', { type: 'number', id: `gen-${name}`, value, min, max, class: 'narrow' });
 
   // ------------------------------------------------------------------ feasibility
   async function loadFeasibility() {

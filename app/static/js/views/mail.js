@@ -96,7 +96,7 @@ export async function render(root) {
     h('section', { class: 'card' },
       h('div', { class: 'form-grid' },
         field(t('معرّف المستأجر (Tenant ID)'), fTenant, t('من Microsoft Entra ← نظرة عامة ← Tenant ID')),
-        field(t('معرّف التطبيق (Client ID)'), fClient, t('Application (client) ID للتطبيق المسجَّل')),
+        field(t('معرّف التطبيق (Client ID)'), fClient, t('المعرّف المسمّى Application (client) ID في التطبيق المسجَّل')),
         field(t('سر التطبيق (Client secret)'), fSecret, t('لا يُعرض السر بعد حفظه، ويُحفظ في الخادم فقط')),
         field(t('بريد المرسل'), fSender, t('صندوق بريد حقيقي في المستأجر، مثل حساب مشترك للنظام')),
         h('div', { class: 'field' }, h('label', { class: 'inline', for: 'mail-enabled' }, fEnabled, t('تفعيل الإرسال بالبريد')))),

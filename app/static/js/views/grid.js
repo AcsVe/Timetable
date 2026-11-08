@@ -110,14 +110,14 @@ export async function render(root) {
                   l.teachers.map(x => nameOf(ctx.teacher[x.teacher_id])).join('، '), room].filter(Boolean);
     const bg = chipColor(l);
     const el = h('div', {
-      class: `card-chip${mini ? ' mini' : ''}${card.duration > 1 && !continuation && !mini ? ' double' : ''}${colorBy === 'none' ? ' plain' : ''}`,
-      style: { background: bg, color: inkFor(bg), opacity: continuation ? '.55' : null },
+      class: `card-chip${mini ? ' mini' : ''}${continuation ? ' continuation' : ''}${card.duration > 1 && !continuation && !mini ? ' double' : ''}${colorBy === 'none' ? ' plain' : ''}`,
+      style: { background: bg, color: inkFor(bg) },
       draggable: editable && !card.is_locked && !continuation ? 'true' : null,
       dataset: { card: card.id }, title: [...new Set(full)].join('\n'),
     },
-      h('div', { class: 'subj' }, isMeeting ? l.title : (subj?.short_ar || nameOf(subj)), continuation && !mini ? ` (${t('تتمّة')})` : ''),
-      sub ? h('div', {}, sub) : null,
-      room && !mini ? h('div', { class: 'muted' }, room) : null,
+      h('div', { class: 'subj', dir: 'auto' }, isMeeting ? l.title : (subj?.short_ar || nameOf(subj)), continuation && !mini ? ` (${t('تتمّة')})` : ''),
+      sub ? h('div', { dir: 'auto' }, sub) : null,
+      room && !mini ? h('div', { class: 'muted', dir: 'auto' }, room) : null,
       !continuation && !mini && (card.is_locked || editable) ? h('span', {
         class: 'lock', role: 'button', title: card.is_locked ? t('مقفلة — انقر لإلغاء القفل') : t('انقر لقفل الحصة'),
         style: { opacity: card.is_locked ? 1 : .25, cursor: editable ? 'pointer' : 'default' },
