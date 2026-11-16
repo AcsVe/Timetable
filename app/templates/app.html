@@ -64,6 +64,16 @@
   </aside>
   <div class="shell">
     <div id="offline-banner" class="banner" hidden>لا يوجد اتصال بالإنترنت — وضع العرض فقط، ولا يمكن الحفظ الآن</div>
+    {% if lic.state in ('warn', 'grace') %}
+    <!-- تنبيه الاشتراك (app/license.py): كل عبارة في عنصر مستقل ليترجمها i18n.js -->
+    <div class="banner license-alert" role="status">
+      <i class="fa-solid fa-hourglass-half" aria-hidden="true"></i>
+      <span>{{ 'ينتهي اشتراك هذا النظام في' if lic.state == 'warn' else 'انتهى اشتراك هذا النظام، وسيتوقف في' }}</span>
+      <span dir="ltr">{{ lic.until if lic.state == 'warn' else lic.lock_from }}</span><span>.</span>
+      <span>تواصل مع مزوّد الخدمة لتجديده.</span>
+      {% if lic.contact %}<bdi>{{ lic.contact }}</bdi>{% endif %}
+    </div>
+    {% endif %}
     <header class="topbar">
       <button class="icon-btn nav-toggle" id="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="القائمة"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
       <div class="page-title" id="page-title"></div>

@@ -47,6 +47,11 @@ def create_app(config_object=Config) -> Flask:
     app.register_blueprint(web_bp)
     register_cli(app)
 
+    # اشتراك النسخة المستضافة (ملف الاشتراكات المشترك أو LICENSE_UNTIL في .env) — انظر app/license.py
+    from app.license import install as install_license
+    install_license(app, open_endpoints={"auth.login", "auth.logout", "web.service_worker", "web.manifest",
+                                         "web.offline", "web.school_logo", "healthz"})
+
     @app.get("/healthz")
     def healthz():
         db.session.execute(text("SELECT 1"))

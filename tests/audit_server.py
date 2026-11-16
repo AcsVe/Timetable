@@ -15,6 +15,11 @@ URL = os.environ.get('AUDIT_DATABASE_URL') or os.environ.get('TEST_DATABASE_URL'
 if not URL or 'test' not in URL and 'audit' not in URL:
     raise SystemExit('AUDIT_DATABASE_URL must point to a test database (its name contains "test" or "audit")')
 os.environ['TEST_DATABASE_URL'] = URL
+for _k in ('LICENSE_FILE', 'LICENSE_ID'):
+    os.environ.pop(_k, None)
+# اشتراك قريب الانتهاء: يظهر تنبيه الاشتراك في كل صفحة فيشمله فحص المظهر واللغة
+from datetime import date, timedelta  # noqa: E402
+os.environ.update(LICENSE_UNTIL=(date.today() + timedelta(days=10)).isoformat(), LICENSE_CONTACT='0790000000')
 
 from flask_migrate import upgrade  # noqa: E402
 from sqlalchemy import text  # noqa: E402
