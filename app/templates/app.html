@@ -20,7 +20,7 @@
   <div class="nav-overlay" data-nav-close></div>
   <aside id="sidebar" class="sidebar" aria-label="القائمة الرئيسية">
     <a class="side-brand" href="#/home">
-      <img id="school-logo" class="brand-logo sys-icon" src="{{ url_for('static', filename='brand/system.svg') }}" alt="">
+      <img id="school-logo" class="brand-logo sys-icon" data-icon="{{ favicon_url }}" src="{{ favicon_url or url_for('static', filename='brand/system.svg') }}" alt="">
       <span class="org" id="school-name">جدولة الحصص</span>
       <span class="sys">نظام جدولة الحصص</span>
     </a>

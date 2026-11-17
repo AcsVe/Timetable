@@ -24,7 +24,7 @@
     <div class="auth-lang"><button type="button" class="lang-switch" id="auth-lang" lang="en">English</button></div>
     <div class="logo-circle">
       {% if brand.logo %}<img class="brand-logo" src="{{ brand.logo }}" alt="">
-      {% else %}<img class="brand-logo sys-icon" src="{{ url_for('static', filename='brand/system.svg') }}" alt="">{% endif %}
+      {% else %}<img class="brand-logo sys-icon" src="{{ favicon_url or url_for('static', filename='brand/system.svg') }}" alt="">{% endif %}
     </div>
     <div class="brand-title" data-en="{{ brand.name_en }}">{{ brand.name_ar }}</div>
     <div class="brand-sub" data-en="School timetable system">نظام جدولة الحصص</div>
