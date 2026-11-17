@@ -49,7 +49,9 @@ def create_app(config_object=Config) -> Flask:
 
     # اشتراك النسخة المستضافة (ملف الاشتراكات المشترك أو LICENSE_UNTIL في .env) — انظر app/license.py
     from app.license import install as install_license
-    install_license(app, open_endpoints={"auth.login", "auth.logout", "web.service_worker", "web.manifest",
+    from app.brand_icon import install as install_favicon
+    install_favicon(app)
+    install_license(app, open_endpoints={"brand_favicon", "auth.login", "auth.logout", "web.service_worker", "web.manifest",
                                          "web.offline", "web.school_logo", "healthz"})
 
     @app.get("/healthz")
