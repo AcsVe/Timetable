@@ -228,7 +228,8 @@ html[dir=rtl] .grid-scroll { --dir: -1; }
   border: 2px dashed var(--line); box-shadow: var(--shadow); }
 .tray.over { border-color: var(--accent); }
 .tray h3 { margin: 0 0 8px; font-size: .95rem; }
-.reasons { font-size: .8125rem; color: var(--err); }
+/* نص الخطأ بلون أغمق من --err: على صف رمادي فاتح (تمرير المؤشر أو التظليل) كان التباين 4.45 وهو أقل من 4.5 */
+.reasons { font-size: .8125rem; color: #b91c1c; }
 /* days as rows (ASC print / SCL style) */
 .tt-grid.days-rows th.dayname { min-width: 84px; text-align: start; padding-inline: 8px; color: var(--ink); }
 .tt-grid .pnum { display: inline-block; min-width: 22px; padding: 1px 6px; border-radius: 99px; background: var(--accent-2);
@@ -637,7 +638,7 @@ html[dir=rtl] .input-group input[dir=ltr] { text-align: right; }
 .auth-card .auth-note { color: var(--muted); font-size: .8125rem; margin: 14px 0 0; line-height: 1.6; }
 .auth-foot { position: relative; z-index: 1; text-align: center; color: rgba(255,255,255,.75); font-size: .8125rem; padding: 0 16px 18px; }
 .auth-foot b { color: #fff; }
-.stat b.reasons { color: var(--err); }
+.stat b.reasons { color: #b91c1c; }
 .field label.btn { display: inline-flex; margin: 0; font-size: .92rem; color: var(--navy); }
 .report-preview.plain .grid-scroll thead th { box-shadow: none; }
 /* the "unplaced" tray beside the grid shows its cards two per row: the tray and the grid fit on one screen */
