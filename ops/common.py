@@ -6,9 +6,9 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE = 'timetable'                 # اسم النظام في النسخ الاحتياطية وNeon وDrive
 
 
-# نوافذ الأوامر في ويندوز لا تعرض العربية (مربعات)، لذلك الكمبيوتر بالإنجليزية والهاتف (Termux) بالعربية.
+# الطرفية (ويندوز ولينكس والخادم عبر SSH) لا تعرض العربية سليمة، لذلك رسائل الأوامر بالإنجليزية دائماً إلا على الهاتف (Termux).
 # يمكن فرض أي منهما بـ IAJ_LANG=ar أو IAJ_LANG=en.
-_LANG = os.environ.get('IAJ_LANG') or os.environ.get('LANG_UI') or ('en' if os.name == 'nt' else 'ar')
+_LANG = os.environ.get('IAJ_LANG') or os.environ.get('LANG_UI') or ('ar' if os.environ.get('TERMUX_VERSION') else 'en')
 EN = _LANG == 'en'
 _ASCII = {'✓': '[OK]', '✅': '[OK]', '✖': '[X]', '❌': '[X]', '⚠': '[!]', '←': '<-', '→': '->', '★': '*', '•': '-',
           '🟢': '[OK]', '🔴': '[X]', '✋': '[!]', '…': '...', '—': '-', '–': '-', '«': '"', '»': '"'}
