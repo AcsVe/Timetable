@@ -179,9 +179,10 @@ export function drawBrand() {
   el.title = name;
   const img = document.getElementById('school-logo');
   const logo = school && school.logo_path;
-  img.src = logo || img.dataset.icon || SYSTEM_ICON;   // أيقونة العميل (FAVICON_FILE) إن وُجدت
-  img.classList.toggle('sys-icon', !logo);
-  img.alt = logo ? `${t('شعار')} ${name}` : '';
+  const custom = img.dataset.icon;                     // أيقونة العميل (FAVICON_FILE) إن وُجدت تُعرض بدل الشعار
+  img.src = custom || logo || SYSTEM_ICON;
+  img.classList.toggle('sys-icon', !logo || !!custom);
+  img.alt = logo && !custom ? `${t('شعار')} ${name}` : '';
   img.hidden = false;
 }
 
