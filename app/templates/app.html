@@ -6,8 +6,10 @@
   <meta name="theme-color" content="#0C67EC">
   <title>جدولة الحصص</title>
   <link rel="manifest" href="/manifest.webmanifest">
+  {% if favicon_url %}<link rel="icon" href="{{ favicon_url }}" type="image/png">{% else %}
   <link rel="icon" href="{{ url_for('static', filename='brand/system.svg') }}" type="image/svg+xml">
   <link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}" sizes="192x192">
+  {% endif %}
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
