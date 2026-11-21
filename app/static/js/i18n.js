@@ -450,7 +450,7 @@ const I18N = {
   'ملف aSc ‏(‎.xml) أو Excel ‏(‎.xlsx) أو CSV': 'aSc file (.xml), Excel (.xlsx) or CSV',
   'من أين أحصل على الملف؟': 'Where do I get the file?',
   'يُدخل المعلمين والمباحث والشعب والدروس والجدول دفعةً واحدة': 'Brings in teachers, subjects, sections, lessons and the timetable in one go',
-  'الاستيراد (aSc / Excel)': 'Import (aSc / Excel)',
+  'الاستيراد (⁦aSc / Excel⁩)': 'Import (aSc / Excel)',
   'ستُحذف البيانات الحالية أولاً': 'Current data will be deleted first',
   'البدء من جديد: حذف كل البيانات الحالية قبل الاستيراد': 'Start over: delete all current data before importing',
   'حُذفت البيانات السابقة': 'Previous data deleted',
