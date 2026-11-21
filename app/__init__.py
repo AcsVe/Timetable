@@ -51,6 +51,9 @@ def create_app(config_object=Config) -> Flask:
     from app.license import install as install_license
     from app.brand_icon import install as install_favicon
     install_favicon(app)
+    # حماية مصدر الصفحات: HTML مشفّر + منع الزر الأيمن وF12 وعرض المصدر — انظر app/page_shield.py
+    from app.page_shield import install as install_shield
+    install_shield(app)
     from app.app_version import install as install_app_version
     install_app_version(app, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # تنبيه الإدارة بصدور تحديث
     install_license(app, open_endpoints={"brand_favicon", "auth.login", "auth.logout", "web.service_worker", "web.manifest",
